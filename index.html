@@ -384,16 +384,9 @@
     <h3>Add deadline</h3>
     <input type="text" id="d-name" placeholder="Task name" />
     <input type="date" id="d-date" />
-    <div style="display:flex;gap:8px;">
-      <select id="d-type" style="flex:1;margin-bottom:8px;">
-        <option value="quiz">Quiz</option>
-        <option value="assignment">Assignment</option>
-        <option value="ministry">Ministry</option>
-        <option value="rachel">Rachel</option>
-        <option value="personal">Personal</option>
-        <option value="other">Other</option>
-      </select>
-      <input type="text" id="d-type-custom" placeholder="Or type custom..." style="flex:1;" />
+    <div style="display:flex;gap:8px;align-items:flex-start;">
+      <select id="d-type" style="flex:1;margin-bottom:8px;"></select>
+      <input type="text" id="d-type-custom" placeholder="Or type new category..." style="flex:1;" />
     </div>
     <button class="btn btn-primary" onclick="addDeadline()">Add deadline</button>
   </div>
@@ -560,6 +553,7 @@ function renderAll() {
   renderStudy();
   renderResources();
   renderScriptures();
+  renderDeadlineTypeSelect();
 }
 
 // ── SUPABASE HELPERS ──────────────────────────────────────────────────────────
@@ -580,10 +574,30 @@ async function loadDeadlines() {
   deadlines = data || [];
 }
 async function loadStudy() {
-  const { data, error } = await sb.from('study').select('*');
-  if (error) throw error;
-  study = {};
-  (data || []).forEach(r => { study[r.key] = r.checked; });
+  try {
+    const { data, error } = await sb.from('study').select('*');
+    if (error) throw error;
+    study = {};
+    (data || []).forEach(r => { study[r.key] = r.checked; });
+    // Sync any localStorage overrides back
+    const subjects = ['polec','pols','phil','econ'];
+    const tasks = ['Lecture','Readings','Summary'];
+    subjects.forEach(s => tasks.forEach(t => {
+      const k = s + '_' + t;
+      const ls = localStorage.getItem('ih-study-' + k);
+      if (ls !== null) study[k] = ls === '1';
+    }));
+  } catch(e) {
+    // Fallback to localStorage entirely
+    study = {};
+    const subjects = ['polec','pols','phil','econ'];
+    const tasks = ['Lecture','Readings','Summary'];
+    subjects.forEach(s => tasks.forEach(t => {
+      const k = s + '_' + t;
+      const ls = localStorage.getItem('ih-study-' + k);
+      if (ls !== null) study[k] = ls === '1';
+    }));
+  }
 }
 
 // ── TABS ──────────────────────────────────────────────────────────────────────
@@ -1054,6 +1068,26 @@ function renderPrayerPoints() {
   el.innerHTML = items.map(p => renderPPItem(p, true)).join('');
 }
 
+// ── DEADLINE CATEGORIES ──────────────────────────────────────────────────────
+const DEFAULT_DEADLINE_TYPES = ['quiz','assignment','ministry','rachel','personal','other'];
+
+function getDeadlineTypes() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('ih-deadline-types') || 'null');
+    return saved || DEFAULT_DEADLINE_TYPES;
+  } catch { return DEFAULT_DEADLINE_TYPES; }
+}
+function saveDeadlineTypes(types) {
+  localStorage.setItem('ih-deadline-types', JSON.stringify(types));
+}
+
+function renderDeadlineTypeSelect() {
+  const sel = document.getElementById('d-type');
+  if (!sel) return;
+  const types = getDeadlineTypes();
+  sel.innerHTML = types.map(t => '<option value="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>').join('');
+}
+
 // ── DEADLINES ─────────────────────────────────────────────────────────────────
 async function addDeadline() {
   const name = document.getElementById('d-name').value.trim();
@@ -1061,6 +1095,15 @@ async function addDeadline() {
   const customType = document.getElementById('d-type-custom').value.trim();
   const type = customType || document.getElementById('d-type').value;
   if (!name||!date) return;
+  // Save new custom type to the list
+  if (customType) {
+    const types = getDeadlineTypes();
+    if (!types.includes(customType.toLowerCase())) {
+      types.push(customType.toLowerCase());
+      saveDeadlineTypes(types);
+      renderDeadlineTypeSelect();
+    }
+  }
   setSyncing('syncing');
   const { data, error } = await sb.from('deadlines').insert([{ name, date, type }]).select();
   if (!error && data) { deadlines.push(data[0]); deadlines.sort((a,b)=>a.date.localeCompare(b.date)); setSyncing('ok'); }
@@ -1104,9 +1147,12 @@ async function toggleStudy(key) {
   if (!el) return;
   const checked = el.checked;
   study[key] = checked;
+  // Save to localStorage immediately so it always persists
+  try { localStorage.setItem('ih-study-' + key, checked ? '1' : '0'); } catch(e) {}
+  // Sync to Supabase in background
   try {
     await sb.from('study').upsert({ key, checked }, { onConflict: 'key' });
-  } catch(e) { console.error('Study sync error', e); }
+  } catch(e) { console.warn('Study sync failed, localStorage saved:', e); }
 }
 async function resetStudy() {
   study = {};
