@@ -1122,7 +1122,7 @@ function renderDeadlines() {
 
 // ── STUDY ─────────────────────────────────────────────────────────────────────
 function renderStudy() {
-  document.getElementById('subject-grid').innerHTML = SUBJECTS.map(s=>`<div class="subject-card"><div class="subject-title">${s.name}</div>${s.tasks.map(t=>{const key=s.id+'_'+t;return `<div class="check-row"><input type="checkbox" id="${key}" ${study[key]?'checked':''} onchange="toggleStudy('${key}')"><label for="${key}">${t}</label></div>`;}).join('')}</div>`).join('');
+  document.getElementById('subject-grid').innerHTML = SUBJECTS.map(s=>`<div class="subject-card"><div class="subject-title">${s.name}</div>${s.tasks.map(t=>{const key=s.id+'_'+t;return `<div class="check-row"><input type="checkbox" id="${key}" ${study[key]?'checked':''} onclick="toggleStudy('${key}')"><label for="${key}">${t}</label></div>`;}).join('')}</div>`).join('');
 }
 function toggleStudy(key) {
   const el = document.getElementById(key);
