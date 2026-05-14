@@ -1122,7 +1122,25 @@ function renderDeadlines() {
 
 // ── STUDY ─────────────────────────────────────────────────────────────────────
 function renderStudy() {
-  document.getElementById('subject-grid').innerHTML = SUBJECTS.map(s=>`<div class="subject-card"><div class="subject-title">${s.name}</div>${s.tasks.map(t=>{const key=s.id+'_'+t;return `<div class="check-row"><input type="checkbox" id="${key}" ${study[key]?'checked':''} onclick="toggleStudy('${key}')"><label for="${key}">${t}</label></div>`;}).join('')}</div>`).join('');
+  const grid = document.getElementById('subject-grid');
+  grid.innerHTML = SUBJECTS.map(s =>
+    `<div class="subject-card"><div class="subject-title">${s.name}</div>` +
+    s.tasks.map(t => {
+      const key = s.id + '_' + t;
+      const checked = study[key] ? ' checked' : '';
+      return `<div class="check-row"><input type="checkbox" id="${key}"${checked}><label for="${key}">${t}</label></div>`;
+    }).join('') +
+    `</div>`
+  ).join('');
+  // Attach listeners after render — most reliable cross-browser/iOS approach
+  SUBJECTS.forEach(s => s.tasks.forEach(t => {
+    const key = s.id + '_' + t;
+    const el = document.getElementById(key);
+    if (el) el.addEventListener('change', function() {
+      study[key] = this.checked;
+      try { localStorage.setItem('ih-study-all', JSON.stringify(study)); } catch(e) {}
+    });
+  }));
 }
 function toggleStudy(key) {
   const el = document.getElementById(key);
@@ -1130,6 +1148,7 @@ function toggleStudy(key) {
   study[key] = el.checked;
   try { localStorage.setItem('ih-study-all', JSON.stringify(study)); } catch(e) {}
 }
+/* study checkboxes use addEventListener in renderStudy — toggleStudy kept as fallback */
 function resetStudy() {
   study = {};
   try { localStorage.removeItem('ih-study-all'); } catch(e) {}
