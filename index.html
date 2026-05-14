@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -360,10 +359,11 @@
     </select>
     <input type="text" id="pp-person" placeholder="Person / group (links to their card)" />
     <input type="text" id="pp-subsection" placeholder="Subsection label (e.g. Fiji, Year 13, Personal)" />
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-      <span style="font-size:13px;color:#555;white-space:nowrap;">Archive after</span>
-      <input type="number" id="pp-days" min="1" max="365" value="30" style="width:70px;margin:0;padding:7px 10px;text-align:center;" />
-      <span style="font-size:13px;color:#555;">days</span>
+    <div id="pp-days-row" style="display:none;">
+      <input type="number" id="pp-days" min="1" max="365" placeholder="Archive after how many days? (default 30)" />
+    </div>
+    <div style="margin-bottom:8px;">
+      <button class="btn-sm" onclick="document.getElementById('pp-days-row').style.display=document.getElementById('pp-days-row').style.display==='none'?'block':'none';return false;" style="font-size:12px;color:var(--muted);">⏱ Custom archive window</button>
     </div>
     <button class="btn btn-primary" onclick="addPrayerPoint()">Add prayer point</button>
   </div>
@@ -385,9 +385,16 @@
     <h3>Add deadline</h3>
     <input type="text" id="d-name" placeholder="Task name" />
     <input type="date" id="d-date" />
-    <div style="display:flex;gap:8px;align-items:flex-start;">
-      <select id="d-type" style="flex:1;margin-bottom:8px;"></select>
-      <input type="text" id="d-type-custom" placeholder="Or type new category..." style="flex:1;" />
+    <div style="display:flex;gap:8px;">
+      <select id="d-type" style="flex:1;margin-bottom:8px;">
+        <option value="quiz">Quiz</option>
+        <option value="assignment">Assignment</option>
+        <option value="ministry">Ministry</option>
+        <option value="rachel">Rachel</option>
+        <option value="personal">Personal</option>
+        <option value="other">Other</option>
+      </select>
+      <input type="text" id="d-type-custom" placeholder="Or type custom..." style="flex:1;" />
     </div>
     <button class="btn btn-primary" onclick="addDeadline()">Add deadline</button>
   </div>
@@ -531,16 +538,15 @@ function setSyncing(state) {
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
   setSyncing('syncing');
-  try {
-    // Load core data first — resources is optional and shouldn't block
-    await Promise.all([loadPrayers(), loadPrayerPoints(), loadDeadlines(), loadStudy(), loadScriptures()]);
-    setSyncing('ok');
-  } catch(e) {
-    console.error('Core load error:', e);
-    setSyncing('error');
-  }
-  // Load resources separately so it never blocks the app
-  loadResources().catch(e => { console.warn('Resources load error:', e); renderResources(); });
+  await Promise.allSettled([
+    loadPrayers().catch(e => console.warn('prayers:', e)),
+    loadPrayerPoints().catch(e => console.warn('prayerpoints:', e)),
+    loadDeadlines().catch(e => console.warn('deadlines:', e)),
+    loadStudy().catch(e => console.warn('study:', e)),
+    loadScriptures().catch(e => console.warn('scriptures:', e)),
+    loadResources().catch(e => console.warn('resources:', e)),
+  ]);
+  setSyncing('ok');
   document.getElementById('loading-screen').style.display = 'none';
   renderAll();
 }
@@ -554,7 +560,6 @@ function renderAll() {
   renderStudy();
   renderResources();
   renderScriptures();
-  renderDeadlineTypeSelect();
 }
 
 // ── SUPABASE HELPERS ──────────────────────────────────────────────────────────
@@ -575,7 +580,6 @@ async function loadDeadlines() {
   deadlines = data || [];
 }
 async function loadStudy() {
-  // Pure localStorage — fast, reliable, no Supabase needed for checkboxes
   study = {};
   try {
     const saved = localStorage.getItem('ih-study-all');
@@ -1051,26 +1055,6 @@ function renderPrayerPoints() {
   el.innerHTML = items.map(p => renderPPItem(p, true)).join('');
 }
 
-// ── DEADLINE CATEGORIES ──────────────────────────────────────────────────────
-const DEFAULT_DEADLINE_TYPES = ['quiz','assignment','ministry','rachel','personal','other'];
-
-function getDeadlineTypes() {
-  try {
-    const saved = JSON.parse(localStorage.getItem('ih-deadline-types') || 'null');
-    return saved || DEFAULT_DEADLINE_TYPES;
-  } catch { return DEFAULT_DEADLINE_TYPES; }
-}
-function saveDeadlineTypes(types) {
-  localStorage.setItem('ih-deadline-types', JSON.stringify(types));
-}
-
-function renderDeadlineTypeSelect() {
-  const sel = document.getElementById('d-type');
-  if (!sel) return;
-  const types = getDeadlineTypes();
-  sel.innerHTML = types.map(t => '<option value="' + t + '">' + t.charAt(0).toUpperCase() + t.slice(1) + '</option>').join('');
-}
-
 // ── DEADLINES ─────────────────────────────────────────────────────────────────
 async function addDeadline() {
   const name = document.getElementById('d-name').value.trim();
@@ -1078,15 +1062,6 @@ async function addDeadline() {
   const customType = document.getElementById('d-type-custom').value.trim();
   const type = customType || document.getElementById('d-type').value;
   if (!name||!date) return;
-  // Save new custom type to the list
-  if (customType) {
-    const types = getDeadlineTypes();
-    if (!types.includes(customType.toLowerCase())) {
-      types.push(customType.toLowerCase());
-      saveDeadlineTypes(types);
-      renderDeadlineTypeSelect();
-    }
-  }
   setSyncing('syncing');
   const { data, error } = await sb.from('deadlines').insert([{ name, date, type }]).select();
   if (!error && data) { deadlines.push(data[0]); deadlines.sort((a,b)=>a.date.localeCompare(b.date)); setSyncing('ok'); }
@@ -1126,10 +1101,12 @@ function renderStudy() {
   document.getElementById('subject-grid').innerHTML = SUBJECTS.map(s=>`<div class="subject-card"><div class="subject-title">${s.name}</div>${s.tasks.map(t=>{const key=s.id+'_'+t;return `<div class="check-row"><input type="checkbox" id="${key}" ${study[key]?'checked':''} onchange="toggleStudy('${key}')"><label for="${key}">${t}</label></div>`;}).join('')}</div>`).join('');
 }
 function toggleStudy(key) {
-  study[key] = !study[key];
+  const el = document.getElementById(key);
+  if (!el) return;
+  study[key] = el.checked;
   try { localStorage.setItem('ih-study-all', JSON.stringify(study)); } catch(e) {}
 }
-async function resetStudy() {
+function resetStudy() {
   study = {};
   try { localStorage.removeItem('ih-study-all'); } catch(e) {}
   renderStudy();
@@ -1151,6 +1128,390 @@ async function generate(type) {
     const data = await res.json();
     out.className='content-output'; out.textContent = data.content?.[0]?.text || 'Something went wrong.';
   } catch(e) { out.className='content-output'; out.textContent='Error connecting. Try again.'; }
+}
+
+// ── VERSE OF THE DAY ──────────────────────────────────────────────────────────
+const VERSES = [
+  { ref: "Jeremiah 17:7-8", text: "Blessed is the one who trusts in the Lord, whose confidence is in him. They will be like a tree planted by the water that sends out its roots by the stream." },
+  { ref: "Philippians 4:6-7", text: "Do not be anxious about anything, but in every situation, by prayer and petition, with thanksgiving, present your requests to God. And the peace of God, which transcends all understanding, will guard your hearts and your minds in Christ Jesus." },
+  { ref: "1 Thessalonians 5:16-18", text: "Rejoice always, pray continually, give thanks in all circumstances; for this is God's will for you in Christ Jesus." },
+  { ref: "Romans 8:28", text: "And we know that in all things God works for the good of those who love him, who have been called according to his purpose." },
+  { ref: "Colossians 3:16", text: "Let the message of Christ dwell among you richly as you teach and admonish one another with all wisdom through psalms, hymns, and songs from the Spirit." },
+  { ref: "James 1:5", text: "If any of you lacks wisdom, you should ask God, who gives generously to all without finding fault, and it will be given to you." },
+  { ref: "Matthew 5:6", text: "Blessed are those who hunger and thirst for righteousness, for they will be filled." },
+  { ref: "Hebrews 3:13", text: "But encourage one another daily, as long as it is called Today, so that none of you may be hardened by sin's deceitfulness." },
+  { ref: "Psalm 51:10", text: "Create in me a pure heart, O God, and renew a steadfast spirit within me." },
+  { ref: "2 Corinthians 12:9", text: "My grace is sufficient for you, for my power is made perfect in weakness. Therefore I will boast all the more gladly about my weaknesses, so that Christ's power may rest on me." },
+  { ref: "Ephesians 6:10", text: "Finally, be strong in the Lord and in his mighty power." },
+  { ref: "Proverbs 11:2", text: "When pride comes, then comes disgrace, but with humility comes wisdom." },
+  { ref: "Jeremiah 15:16", text: "When your words came, I ate them; they were my joy and my heart's delight, for I bear your name, Lord God Almighty." },
+  { ref: "1 Corinthians 4:3", text: "I care very little if I am judged by you or by any human court; indeed, I do not even judge myself." },
+  { ref: "Psalm 16:11", text: "You make known to me the path of life; you will fill me with joy in your presence, with eternal pleasures at your right hand." },
+  { ref: "Romans 12:2", text: "Do not conform to the pattern of this world, but be transformed by the renewing of your mind." },
+  { ref: "Luke 15:20", text: "But while he was still a long way off, his father saw him and was filled with compassion for him; he ran to his son, threw his arms around him and kissed him." },
+  { ref: "Galatians 6:5", text: "For each one should carry their own load." },
+  { ref: "1 Timothy 4:16", text: "Watch your life and doctrine closely. Persevere in them, because if you do, you will save both yourself and your hearers." },
+  { ref: "Jeremiah 29:13", text: "You will seek me and find me when you seek me with all your heart." },
+  { ref: "Matthew 18:20", text: "For where two or three gather in my name, there am I with them." },
+  { ref: "Genesis 50:20", text: "You intended to harm me, but God intended it for good to accomplish what is now being done, the saving of many lives." },
+  { ref: "Psalm 119:105", text: "Your word is a lamp for my feet, a light on my path." },
+  { ref: "Isaiah 40:31", text: "But those who hope in the Lord will renew their strength. They will soar on wings like eagles; they will run and not grow weary, they will walk and not be faint." },
+  { ref: "Lamentations 3:22-23", text: "Because of the Lord's great love we are not consumed, for his compassions never fail. They are new every morning; great is your faithfulness." },
+  { ref: "John 15:13", text: "Greater love has no one than this: to lay down one's life for one's friends." },
+  { ref: "Jeremiah 17:14", text: "Heal me, Lord, and I will be healed; save me and I will be saved, for you are the one I praise." },
+  { ref: "James 4:8", text: "Come near to God and he will come near to you." },
+];
+
+function renderVOTD() {
+  const dayIndex = new Date().getDate() % VERSES.length;
+  const v = VERSES[dayIndex];
+  document.getElementById('votd-ref').textContent = v.ref;
+  const el = document.getElementById('votd-text');
+  el.textContent = v.text;
+  el.className = 'votd-text';
+}
+
+// ── EDIT PRAYER POINT ─────────────────────────────────────────────────────────
+let editingPPId = null;
+
+function openEditPP(id) {
+  const pp = prayerPoints.find(p => p.id === id);
+  if (!pp) return;
+  editingPPId = id;
+  document.getElementById('edit-pp-title').value = pp.title || '';
+  document.getElementById('edit-pp-body').value = pp.body || '';
+  document.getElementById('edit-pp-type').value = pp.type || 'general';
+  document.getElementById('edit-pp-person').value = pp.person || '';
+  document.getElementById('edit-pp-subsection').value = pp.subsection || '';
+  document.getElementById('edit-pp-days').value = '';
+  document.getElementById('edit-pp-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('edit-pp-title').focus(), 150);
+}
+
+function closeEditModal(e) {
+  if (e.target === document.getElementById('edit-pp-overlay')) closeEditModalDirect();
+}
+function closeEditModalDirect() {
+  document.getElementById('edit-pp-overlay').classList.remove('open');
+  editingPPId = null;
+}
+
+async function saveEditPP() {
+  if (!editingPPId) return;
+  const title = document.getElementById('edit-pp-title').value.trim();
+  const body = document.getElementById('edit-pp-body').value.trim();
+  const type = document.getElementById('edit-pp-type').value;
+  const person = document.getElementById('edit-pp-person').value.trim();
+  const daysVal = document.getElementById('edit-pp-days').value;
+  if (!title) return;
+
+  const subsection = document.getElementById('edit-pp-subsection').value.trim();
+  const updates = { title, body, type, person, subsection };
+
+  // If days field filled in, recalculate created_at so it expires in that many days
+  if (daysVal && type === 'current') {
+    const newCreatedAt = new Date(Date.now() - getArchiveMs() + parseInt(daysVal,10) * 86400000).toISOString();
+    updates.created_at = newCreatedAt;
+  }
+
+  setSyncing('syncing');
+  const { error } = await sb.from('prayer_points').update(updates).eq('id', editingPPId);
+  if (!error) {
+    prayerPoints = prayerPoints.map(p => p.id === editingPPId ? { ...p, ...updates } : p);
+    setSyncing('ok');
+  } else { setSyncing('error'); }
+  closeEditModalDirect();
+  renderPrayerPoints(); renderPrayer(); renderToday();
+}
+
+// ── RESOURCES (editable, persistent via Supabase) ─────────────────────────────
+let resCategories = [];
+
+const DEFAULT_CATEGORIES = [
+  {
+    id: 'evangelism', title: 'Evening Activities (Evangelism)',
+    items: [
+      'Spotlight — torch & hide in bush, twist: mission cards or timed run',
+      'Dinner + 3 guided questions (see generator below)',
+      'Trivia night — 1 faith-adjacent round framed as "big questions"',
+      'Park cricket / social sport → natural conversation',
+      'Anonymous question box — everyone submits, you answer together',
+      'Cook together — one host, everyone brings one ingredient',
+      'Board games: Codenames, Wavelength, Jackbox — low barrier, high social'
+    ]
+  },
+  {
+    id: 'maturity', title: 'Evening Activities (Maturity)',
+    items: [
+      "The Lie I Believed — testimony format + scripture + discussion",
+      'Scripture deep-dive — one passage, honest wrestling, no sermon',
+      'Spiritual audit — guided reflection on prayer, sin, where God feels distant',
+      'Accountability pairs — intentional check-in format'
+    ]
+  },
+  {
+    id: 'community', title: 'Evening Activities (Community)',
+    items: [
+      'Shared meal with real conversation questions',
+      'Serve together + debrief',
+      'Testimony night — one person\'s full story',
+      'Skills swap — someone teaches what they\'re good at, connects it to serving God'
+    ]
+  },
+  {
+    id: 'brainstorm', title: 'Ministry Brainstorm',
+    items: [
+      'Run club — Monday mornings, open to public',
+      'Book library at church — rotating titles',
+      'Chalk board question after Sunday sermon',
+      'Sunday-Bible-Coffee-Brunch — consistent community rhythm',
+      'QR codes at events linking to gospel content',
+      'Fortnightly outreach + serve day'
+    ]
+  }
+];
+
+async function loadResources() {
+  try {
+    const { data, error } = await sb.from('resources').select('*').order('sort_order', { ascending: true });
+    if (error) {
+      // Table may not exist yet — use defaults silently
+      resCategories = DEFAULT_CATEGORIES.map((c, i) => ({ ...c, sort_order: i }));
+    } else if (!data || !data.length) {
+      resCategories = DEFAULT_CATEGORIES.map((c, i) => ({ ...c, sort_order: i }));
+      // Try to seed but don't crash if it fails
+      try {
+        await Promise.all(resCategories.map((c, i) =>
+          sb.from('resources').upsert({ id: c.id, title: c.title, items: c.items, sort_order: i })
+        ));
+      } catch(e) { /* ignore seed errors */ }
+    } else {
+      resCategories = data.map(r => ({
+        ...r,
+        items: Array.isArray(r.items) ? r.items : (typeof r.items === 'string' ? JSON.parse(r.items) : [])
+      }));
+    }
+  } catch(e) {
+    console.warn('Resources load failed, using defaults', e);
+    resCategories = DEFAULT_CATEGORIES.map((c, i) => ({ ...c, sort_order: i }));
+  }
+  renderResources();
+}
+
+async function saveResource(cat) {
+  try {
+    setSyncing('syncing');
+    const { error } = await sb.from('resources').upsert({ id: cat.id, title: cat.title, items: cat.items, sort_order: cat.sort_order || 0 });
+    setSyncing(error ? 'error' : 'ok');
+  } catch(e) {
+    console.warn('saveResource failed:', e);
+    setSyncing('error');
+  }
+}
+
+function renderResources() {
+  const el = document.getElementById('res-categories');
+  if (!el) return;
+  el.innerHTML = resCategories.map((cat, ci) => `
+    <div class="res-category">
+      <div class="res-cat-header" onclick="toggleResCat('${cat.id}')">
+        <span class="res-cat-title">${esc(cat.title)}</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn-sm" style="font-size:11px;padding:3px 8px;" onclick="event.stopPropagation();renameResCat('${cat.id}')">✏️</button>
+          <button class="btn-danger" onclick="event.stopPropagation();delResCat('${cat.id}')">×</button>
+          <span class="res-cat-chevron" id="chev-${cat.id}">▼</span>
+        </div>
+      </div>
+      <div class="res-cat-body" id="resbody-${cat.id}" style="display:none;">
+        ${cat.items.map((item, ii) => `
+          <div class="res-item">
+            <span class="res-item-text">${esc(item)}</span>
+            <button class="btn-danger" onclick="delResItem('${cat.id}', ${ii})">×</button>
+          </div>
+        `).join('')}
+        <div class="res-add-row">
+          <input type="text" id="res-input-${cat.id}" placeholder="Add item..." onkeydown="if(event.key==='Enter')addResItem('${cat.id}')" />
+          <button class="btn-xs" onclick="addResItem('${cat.id}')">Add</button>
+        </div>
+      </div>
+    </div>
+  `).join('') + `<button class="btn-new-cat" onclick="addResCategory()">+ New category</button>`;
+}
+
+function toggleResCat(id) {
+  const body = document.getElementById('resbody-' + id);
+  const chev = document.getElementById('chev-' + id);
+  if (!body) return;
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+async function addResItem(catId) {
+  const input = document.getElementById('res-input-' + catId);
+  if (!input) return;
+  const val = input.value.trim();
+  if (!val) return;
+  const cat = resCategories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.items = [...(cat.items || []), val];
+  input.value = '';
+  await saveResource(cat);
+  renderResources();
+  // Reopen the category
+  setTimeout(() => { const b = document.getElementById('resbody-' + catId); if (b) b.style.display = 'block'; }, 50);
+}
+
+async function delResItem(catId, index) {
+  const cat = resCategories.find(c => c.id === catId);
+  if (!cat) return;
+  cat.items = cat.items.filter((_, i) => i !== index);
+  await saveResource(cat);
+  renderResources();
+}
+
+async function addResCategory() {
+  const title = prompt('Category name:');
+  if (!title) return;
+  const id = 'cat_' + Date.now();
+  const newCat = { id, title, items: [], sort_order: resCategories.length };
+  resCategories.push(newCat);
+  await saveResource(newCat);
+  renderResources();
+}
+
+async function renameResCat(id) {
+  const cat = resCategories.find(c => c.id === id);
+  if (!cat) return;
+  const title = prompt('New name:', cat.title);
+  if (!title) return;
+  cat.title = title;
+  await saveResource(cat);
+  renderResources();
+}
+
+async function delResCat(id) {
+  if (!confirm('Delete this category and all its items?')) return;
+  resCategories = resCategories.filter(c => c.id !== id);
+  setSyncing('syncing');
+  const { error } = await sb.from('resources').delete().eq('id', id);
+  setSyncing(error ? 'error' : 'ok');
+  renderResources();
+}
+
+// ── UPDATE renderPrayerPoints to add edit button ──────────────────────────────
+
+// ── SCRIPTURE MEMORY ─────────────────────────────────────────────────────────
+let scriptures = [];
+
+async function loadScriptures() {
+  try {
+    const { data, error } = await sb.from('scriptures').select('*').order('created_at', { ascending: true });
+    if (error) throw error;
+    scriptures = data || [];
+  } catch(e) {
+    scriptures = [];
+  }
+}
+
+async function addScripture() {
+  const ref = document.getElementById('sv-ref').value.trim();
+  const text = document.getElementById('sv-text').value.trim();
+  const category = document.getElementById('sv-category').value.trim() || 'General';
+  if (!ref || !text) return;
+  setSyncing('syncing');
+  const { data, error } = await sb.from('scriptures').insert([{
+    ref, text, category, progress: 0
+  }]).select();
+  if (!error && data) { scriptures.push(data[0]); setSyncing('ok'); }
+  else setSyncing('error');
+  ['sv-ref','sv-text','sv-category'].forEach(id => document.getElementById(id).value = '');
+  renderScriptures();
+}
+
+async function updateScriptureProgress(id, progress) {
+  setSyncing('syncing');
+  const { error } = await sb.from('scriptures').update({ progress }).eq('id', id);
+  if (!error) { scriptures = scriptures.map(s => s.id===id ? {...s, progress} : s); setSyncing('ok'); }
+  else setSyncing('error');
+  renderScriptures();
+}
+
+async function delScripture(id) {
+  if (!confirm('Remove this verse?')) return;
+  setSyncing('syncing');
+  const { error } = await sb.from('scriptures').delete().eq('id', id);
+  if (!error) { scriptures = scriptures.filter(s => s.id !== id); setSyncing('ok'); }
+  else setSyncing('error');
+  renderScriptures();
+}
+
+function renderScriptures() {
+  const el = document.getElementById("sv-category-list");
+  if (!el) return;
+  if (!scriptures.length) {
+    el.innerHTML = '<div class="empty" style="margin-top:16px;">No verses added yet</div>';
+    return;
+  }
+
+  const LABELS = ["Not started","Reading","Familiar","Mostly memorised","Memorised ✓"];
+  const BG = ["#e0e0e0","#fff3e0","#e3f2fd","#ede7f6","#e8f5e9"];
+  const FG = ["#666","#e65100","#0277bd","#4527a0","#2e7d32"];
+
+  const catMap = {};
+  scriptures.forEach(s => {
+    const cat = s.category || "General";
+    if (!catMap[cat]) catMap[cat] = [];
+    catMap[cat].push(s);
+  });
+
+  let html = "";
+  Object.keys(catMap).forEach(cat => {
+    const items = catMap[cat];
+    const memorised = items.filter(s => (s.progress||0) >= 4).length;
+    const openKey = "ih-sv-open-" + cat;
+    const isOpen = localStorage.getItem(openKey) !== "false";
+    const catEsc = esc(cat).replace(/'/g, "\'");
+    html += '<div class="res-category" style="margin-bottom:10px;">';
+    html += '<div class="res-cat-header" onclick="toggleSVCat(\'' + catEsc + '\')">';
+    html += '<span class="res-cat-title">' + esc(cat) + "</span>";
+    html += '<div style="display:flex;align-items:center;gap:8px;">';
+    html += '<span style="font-size:11px;color:var(--muted);">' + memorised + "/" + items.length + " ✓</span>";
+    html += '<span class="res-cat-chevron" id="sv-chev-' + catEsc + '" style="transform:' + (isOpen?"rotate(0)":"rotate(-90deg)") + '">▼</span>';
+    html += "</div></div>";
+    html += '<div id="sv-cat-body-' + catEsc + '" style="display:' + (isOpen?"block":"none") + ';padding:0 14px 12px;">';
+    items.forEach(s => {
+      const prog = s.progress || 0;
+      html += '<div style="padding:12px 0;border-bottom:1px solid var(--border);">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">';
+      html += '<div style="flex:1;">';
+      html += '<div style="font-size:14px;font-weight:600;color:var(--navy);">' + esc(s.ref) + "</div>";
+      html += '<div style="font-size:13px;color:#444;margin-top:5px;line-height:1.6;font-style:italic;">' + esc(s.text) + "</div>";
+      html += "</div>";
+      html += '<button class="btn-danger" onclick="delScripture(\'' + s.id + '\')" style="flex-shrink:0;">×</button>';
+      html += "</div>";
+      html += '<div style="margin-top:10px;">';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:5px;">Progress</div>';
+      html += '<div style="display:flex;gap:4px;flex-wrap:wrap;">';
+      LABELS.forEach((label, i) => {
+        const bg = prog===i ? BG[i] : "#f0ede8";
+        const fg = prog===i ? FG[i] : "#aaa";
+        html += '<button onclick="updateScriptureProgress(\'' + s.id + '\',' + i + ')" style="padding:4px 10px;border-radius:99px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:' + bg + ";color:" + fg + ';">' + label + "</button>";
+      });
+      html += "</div></div></div>";
+    });
+    html += "</div></div>";
+  });
+  el.innerHTML = html;
+}
+
+function toggleSVCat(cat) {
+  const body = document.getElementById('sv-cat-body-' + cat);
+  const chev = document.getElementById('sv-chev-' + cat);
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (chev) chev.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+  localStorage.setItem('ih-sv-open-' + cat, !isOpen);
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
