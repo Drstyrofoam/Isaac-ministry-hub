@@ -1123,24 +1123,35 @@ function renderDeadlines() {
 // ── STUDY ─────────────────────────────────────────────────────────────────────
 function renderStudy() {
   const grid = document.getElementById('subject-grid');
-  grid.innerHTML = SUBJECTS.map(s =>
-    `<div class="subject-card"><div class="subject-title">${s.name}</div>` +
-    s.tasks.map(t => {
+  grid.innerHTML = '';
+  SUBJECTS.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'subject-card';
+    const title = document.createElement('div');
+    title.className = 'subject-title';
+    title.textContent = s.name;
+    card.appendChild(title);
+    s.tasks.forEach(t => {
       const key = s.id + '_' + t;
-      const checked = study[key] ? ' checked' : '';
-      return `<div class="check-row"><input type="checkbox" id="${key}"${checked}><label for="${key}">${t}</label></div>`;
-    }).join('') +
-    `</div>`
-  ).join('');
-  // Attach listeners after render — most reliable cross-browser/iOS approach
-  SUBJECTS.forEach(s => s.tasks.forEach(t => {
-    const key = s.id + '_' + t;
-    const el = document.getElementById(key);
-    if (el) el.addEventListener('change', function() {
-      study[key] = this.checked;
-      try { localStorage.setItem('ih-study-all', JSON.stringify(study)); } catch(e) {}
+      const row = document.createElement('div');
+      row.className = 'check-row';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id = key;
+      cb.checked = !!study[key];
+      cb.addEventListener('change', function() {
+        study[key] = this.checked;
+        try { localStorage.setItem('ih-study-all', JSON.stringify(study)); } catch(e) {}
+      });
+      const lbl = document.createElement('label');
+      lbl.htmlFor = key;
+      lbl.textContent = t;
+      row.appendChild(cb);
+      row.appendChild(lbl);
+      card.appendChild(row);
     });
-  }));
+    grid.appendChild(card);
+  });
 }
 function toggleStudy(key) {
   const el = document.getElementById(key);
