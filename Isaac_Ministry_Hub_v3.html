@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Isaac's Ministry Hub</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4f0; color: #1a1a1a; min-height: 100vh; }
+
+header { background: #2E4057; color: white; padding: 16px 20px; display: flex; align-items: center; gap: 10px; }
+.logo { font-size: 24px; }
+header h1 { font-size: 17px; font-weight: 600; }
+header p { font-size: 11px; opacity: 0.7; margin-top: 1px; }
+
+.tabs { display: flex; background: white; border-bottom: 1px solid #e8e5e0; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tab { padding: 11px 13px; font-size: 13px; font-weight: 500; color: #888; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; flex-shrink: 0; }
+.tab.active { color: #2E4057; border-bottom-color: #2E4057; }
+
+.section { display: none; padding: 14px; max-width: 640px; margin: 0 auto; }
+.section.active { display: block; }
+
+.card { background: white; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.card-title { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 11px; }
+
+input[type="text"], input[type="date"], select, textarea {
+  width: 100%; padding: 9px 11px; border: 1px solid #e0ddd8; border-radius: 8px;
+  font-size: 14px; font-family: inherit; background: #fafaf8; margin-bottom: 8px;
+}
+textarea { resize: vertical; min-height: 56px; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: #2E4057; background: white; }
+
+.btn { padding: 9px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; }
+.btn-primary { background: #2E4057; color: white; }
+.btn-sm { padding: 4px 9px; font-size: 11px; border-radius: 6px; border: 1px solid #e0ddd8; background: white; color: #666; cursor: pointer; }
+.btn-green { background: #e8f5e9; color: #2e7d32; border: none; padding: 4px 9px; font-size: 11px; border-radius: 6px; cursor: pointer; }
+.btn-orange { background: #fff3e0; color: #e65100; border: none; padding: 4px 9px; font-size: 11px; border-radius: 6px; cursor: pointer; }
+.btn-red { background: none; border: none; color: #ccc; cursor: pointer; font-size: 13px; padding: 2px 5px; }
+.btn-record { background: #e53935; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 8px; }
+.btn-record.recording { background: #b71c1c; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+
+.item { display: flex; align-items: flex-start; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #f0ede8; gap: 8px; }
+.item:last-child { border-bottom: none; padding-bottom: 0; }
+.item-name { font-size: 14px; font-weight: 500; }
+.item-sub { font-size: 12px; color: #888; margin-top: 1px; }
+.item-note { font-size: 12px; color: #666; font-style: italic; margin-top: 2px; }
+.row-btns { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+
+.badge { display: inline-block; padding: 2px 7px; border-radius: 99px; font-size: 11px; font-weight: 500; }
+.b-urgent { background: #fce8e8; color: #b71c1c; }
+.b-soon { background: #fff8e1; color: #e65100; }
+.b-ok { background: #e8f5e9; color: #1b5e20; }
+.b-prayer { background: #ede7f6; color: #4527a0; }
+.b-rachel { background: #fce4ec; color: #880e4f; }
+.b-study { background: #e3f2fd; color: #0d47a1; }
+.b-ministry { background: #e8f5e9; color: #1b5e20; }
+.b-expiring { background: #fff3e0; color: #e65100; }
+
+.tier-lbl { font-size: 11px; font-weight: 600; color: #bbb; text-transform: uppercase; letter-spacing: 0.05em; margin: 12px 0 5px; }
+
+/* TODAY */
+.today-banner { background: linear-gradient(135deg, #2E4057, #3d5a78); color: white; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+.today-banner .t-tier { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+.prayer-point-scroll { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.prayer-point-pill { background: rgba(255,255,255,0.15); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.prayer-point-pill .pp-name { font-weight: 600; margin-bottom: 2px; }
+.prayer-point-pill .pp-focus { font-size: 12px; opacity: 0.85; }
+.prayer-point-pill.expiring { background: rgba(255,183,77,0.3); border: 1px solid rgba(255,183,77,0.5); }
+
+.day-row { display: grid; grid-template-columns: repeat(7,1fr); gap: 4px; margin-bottom: 10px; }
+.day-cell { background: white; border-radius: 8px; padding: 6px 2px; text-align: center; font-size: 9px; border: 1px solid #e8e5e0; }
+.day-cell .dn { font-weight: 600; color: #888; font-size: 10px; }
+.day-cell .dt { color: #2E4057; margin-top: 1px; font-size: 9px; }
+.day-cell.today-cell { background: #2E4057; border-color: #2E4057; }
+.day-cell.today-cell .dn, .day-cell.today-cell .dt { color: white; }
+
+/* PRAYER */
+.prayer-item { background: #fafaf8; border: 1px solid #eeebe6; border-radius: 10px; padding: 11px 13px; margin-bottom: 7px; }
+.prayer-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.prayer-item-body { flex: 1; min-width: 0; }
+.prayer-item-name { font-size: 14px; font-weight: 600; color: #1a1a1a; }
+.prayer-item-focus { font-size: 12px; color: #555; margin-top: 2px; }
+.prayer-item-note { font-size: 12px; color: #888; font-style: italic; margin-top: 3px; }
+.prayer-item-last { font-size: 11px; color: #aaa; margin-top: 3px; }
+.prayer-item-points { margin-top: 8px; }
+.prayer-point-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; border-top: 1px solid #f0ede8; gap: 6px; }
+.prayer-point-text { font-size: 13px; color: #444; flex: 1; }
+.prayer-point-text.done { text-decoration: line-through; color: #bbb; }
+.add-point-row { display: flex; gap: 6px; margin-top: 8px; }
+.add-point-row input { margin: 0; font-size: 13px; }
+.expiry-badge { font-size: 10px; padding: 1px 6px; border-radius: 99px; background: #fff3e0; color: #e65100; white-space: nowrap; }
+
+/* STUDY - fixed checkboxes */
+.subj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.subj-card { background: #f8f7f4; border-radius: 10px; padding: 11px; }
+.subj-title { font-size: 12px; font-weight: 600; color: #2E4057; margin-bottom: 7px; }
+.chk-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }
+.chk-box { width: 16px; height: 16px; border: 2px solid #2E4057; border-radius: 4px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: white; transition: all 0.15s; }
+.chk-box.checked { background: #2E4057; }
+.chk-box.checked::after { content: '✓'; color: white; font-size: 11px; font-weight: 700; }
+.chk-label { font-size: 13px; color: #555; }
+.chk-label.checked { text-decoration: line-through; color: #aaa; }
+
+/* RESOURCES */
+.res-tabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.res-tab { padding: 5px 11px; border-radius: 20px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid #e0ddd8; background: white; color: #666; }
+.res-tab.active { background: #2E4057; color: white; border-color: #2E4057; }
+.res-section { display: none; }
+.res-section.active { display: block; }
+.res-item { background: #fafaf8; border: 1px solid #e8e5e0; border-radius: 10px; padding: 11px 13px; margin-bottom: 7px; }
+.res-item-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.res-item-text { font-size: 13px; color: #333; line-height: 1.5; flex: 1; }
+.res-item-text.editing { display: none; }
+.res-edit-input { display: none; width: 100%; font-size: 13px; min-height: 52px; margin-bottom: 6px; }
+.res-edit-input.editing { display: block; }
+.res-feedback { margin-top: 7px; border-top: 1px solid #f0ede8; padding-top: 7px; }
+.feedback-list { list-style: none; }
+.feedback-list li { font-size: 12px; color: #888; padding: 2px 0; display: flex; gap: 6px; align-items: flex-start; }
+.feedback-list li::before { content: "→"; color: #2E4057; flex-shrink: 0; }
+.feedback-input-row { display: flex; gap: 6px; margin-top: 5px; }
+.feedback-input-row input { margin: 0; font-size: 12px; padding: 6px 9px; }
+.add-res-row { display: flex; gap: 6px; margin-top: 7px; }
+.add-res-row input { margin: 0; font-size: 13px; }
+
+/* AI GENERATOR */
+.gen-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 9px; }
+.gen-card { background: white; border: 1.5px solid #e0ddd8; border-radius: 9px; padding: 11px; cursor: pointer; transition: all 0.15s; }
+.gen-card:hover, .gen-card.active { border-color: #2E4057; background: #f0f4f8; }
+.gen-card h4 { font-size: 12px; font-weight: 600; color: #2E4057; margin-bottom: 2px; }
+.gen-card p { font-size: 11px; color: #999; }
+.gen-output { background: #fafaf8; border: 1px solid #e0ddd8; border-radius: 9px; padding: 13px; font-size: 13px; line-height: 1.75; white-space: pre-wrap; display: none; margin-top: 9px; }
+.gen-output.loading { color: #aaa; font-style: italic; }
+
+/* AUDIO JOURNAL */
+.audio-status { text-align: center; padding: 12px; font-size: 13px; color: #666; }
+.audio-timer { font-size: 28px; font-weight: 600; color: #2E4057; text-align: center; padding: 8px 0; }
+.transcript-entry { background: #fafaf8; border: 1px solid #e8e5e0; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.transcript-entry-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.transcript-entry-date { font-size: 11px; font-weight: 600; color: #2E4057; }
+.transcript-entry-text { font-size: 13px; color: #333; line-height: 1.6; white-space: pre-wrap; }
+.transcript-entry-text.editing-t { display: none; }
+.transcript-edit-area { display: none; width: 100%; font-size: 13px; min-height: 80px; margin-top: 6px; }
+.transcript-edit-area.editing-t { display: block; }
+.waveform { display: flex; align-items: center; justify-content: center; gap: 3px; height: 40px; margin: 8px 0; }
+.wave-bar { width: 4px; background: rgba(255,255,255,0.6); border-radius: 2px; animation: wave 0.8s ease-in-out infinite; }
+.wave-bar:nth-child(2) { animation-delay: 0.1s; }
+.wave-bar:nth-child(3) { animation-delay: 0.2s; }
+.wave-bar:nth-child(4) { animation-delay: 0.3s; }
+.wave-bar:nth-child(5) { animation-delay: 0.4s; }
+@keyframes wave { 0%,100%{height:6px} 50%{height:24px} }
+
+.empty { text-align: center; color: #ccc; font-size: 13px; padding: 16px 0; }
+.info-block { background: #f0f4f8; border-radius: 9px; padding: 11px 13px; font-size: 12px; color: #555; line-height: 1.6; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🌿</div>
+  <div>
+    <h1>Isaac's Ministry Hub</h1>
+    <p id="hdr-date"></p>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="sw('today')">Today</div>
+  <div class="tab" onclick="sw('prayer')">Prayer</div>
+  <div class="tab" onclick="sw('deadlines')">Deadlines</div>
+  <div class="tab" onclick="sw('study')">Study</div>
+  <div class="tab" onclick="sw('resources')">Resources</div>
+  <div class="tab" onclick="sw('journal')">Audio Journal</div>
+</div>
+
+<!-- TODAY -->
+<div id="today" class="section active">
+  <div class="today-banner">
+    <div class="t-tier" id="t-tier">Loading...</div>
+    <div class="waveform" id="t-wave" style="display:none;">
+      <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
+      <div class="wave-bar"></div><div class="wave-bar"></div>
+    </div>
+    <div class="prayer-point-scroll" id="t-points"></div>
+  </div>
+  <div class="day-row" id="day-row"></div>
+  <div class="card" id="expiring-card" style="display:none;">
+    <div class="card-title">⚠️ Prayer points expiring soon</div>
+    <div id="expiring-list"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Due this week</div>
+    <div id="t-deadlines"><div class="empty">Nothing due 🎉</div></div>
+  </div>
+</div>
+
+<!-- PRAYER -->
+<div id="prayer" class="section">
+  <div class="card">
+    <div class="card-title">Add person</div>
+    <input id="p-name" placeholder="Name" />
+    <select id="p-tier">
+      <option value="close">Close brothers</option>
+      <option value="girlfriend">Girlfriend (Rachel)</option>
+      <option value="church">Church community</option>
+      <option value="coleaders">Co-leaders</option>
+      <option value="y13">Year 13 cohort</option>
+      <option value="evangelism">Evangelism contacts</option>
+      <option value="mission">Mission partners</option>
+    </select>
+    <input id="p-focus" placeholder="Main prayer focus..." />
+    <textarea id="p-notes" placeholder="Notes / context (optional)..."></textarea>
+    <button class="btn btn-primary" onclick="addPrayer()">Add person</button>
+  </div>
+  <div id="prayer-list"></div>
+</div>
+
+<!-- DEADLINES -->
+<div id="deadlines" class="section">
+  <div class="card">
+    <div class="card-title">Add deadline</div>
+    <input id="d-name" placeholder="Task name" />
+    <input type="date" id="d-date" />
+    <select id="d-type">
+      <option value="quiz">Quiz</option>
+      <option value="assignment">Assignment</option>
+      <option value="ministry">Ministry</option>
+      <option value="rachel">Rachel</option>
+      <option value="personal">Personal</option>
+      <option value="other">Other</option>
+    </select>
+    <button class="btn btn-primary" onclick="addDeadline()">Add</button>
+  </div>
+  <div id="deadline-list"></div>
+</div>
+
+<!-- STUDY -->
+<div id="study" class="section">
+  <div class="card">
+    <div class="card-title">Weekly checklist</div>
+    <div class="subj-grid" id="subj-grid"></div>
+  </div>
+  <div class="card">
+    <button class="btn-sm" onclick="resetStudy()">New week — reset all ✓</button>
+  </div>
+</div>
+
+<!-- RESOURCES -->
+<div id="resources" class="section">
+  <div class="res-tabs">
+    <div class="res-tab active" onclick="swRes('evangelism')">Evangelism</div>
+    <div class="res-tab" onclick="swRes('maturity')">Maturity</div>
+    <div class="res-tab" onclick="swRes('community')">Community</div>
+    <div class="res-tab" onclick="swRes('dinners')">Dinners</div>
+    <div class="res-tab" onclick="swRes('generator')">AI Generator</div>
+  </div>
+
+  <div id="res-evangelism" class="res-section active">
+    <div class="card">
+      <div class="card-title">Activities — evangelism</div>
+      <div id="ev-list"></div>
+      <div class="add-res-row"><input id="ev-new" placeholder="Add activity..." /><button class="btn btn-primary" onclick="addRes('ev')">+</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title">From your After Church activities doc</div>
+      <div class="info-block">
+        <strong>Chalkboard:</strong> Post-sermon question — nuanced conversation, opens to new people.<br><br>
+        <strong>Run club:</strong> Low-barrier, informal, wide age range. Route through Allambie.<br><br>
+        <strong>Sunrise Bible + coffee:</strong> Pick up, beach/park, coffee, passage. Car = prayer + vision.<br><br>
+        <strong>EitED:</strong> One gospel conversation per week. Check in on this with your core group.<br><br>
+        <strong>Key tension:</strong> "You must go, but not assimilate. Love, but not be."
+      </div>
+    </div>
+  </div>
+
+  <div id="res-maturity" class="res-section">
+    <div class="card">
+      <div class="card-title">Activities — maturity</div>
+      <div id="mat-list"></div>
+      <div class="add-res-row"><input id="mat-new" placeholder="Add activity..." /><button class="btn btn-primary" onclick="addRes('mat')">+</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Spiritual Milk vs Solid Food themes</div>
+      <div class="info-block">
+        <strong>Thesis:</strong> Where we find our value determines our spiritual maturity.<br><br>
+        <strong>Themes:</strong> Legalism • Counterfeit Christianity • Counting the cost • Emotionalism vs intellectualism • The deceitful heart.<br><br>
+        <strong>Callum:</strong> Nominal Christian — in ministry but not transformed.<br><br>
+        <strong>Spiritual Train Tracks:</strong> Christianity holds tensions in paradox.<br><br>
+        <strong>MAPS:</strong> Model → Articulate → Prayer → Systems.
+      </div>
+    </div>
+  </div>
+
+  <div id="res-community" class="res-section">
+    <div class="card">
+      <div class="card-title">Activities — community</div>
+      <div id="com-list"></div>
+      <div class="add-res-row"><input id="com-new" placeholder="Add activity..." /><button class="btn btn-primary" onclick="addRes('com')">+</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Notes on community building</div>
+      <div class="info-block">
+        <strong>3-per-term:</strong> 1 maturity, 1 community, 1 evangelism. Fixed slot, variable activity.<br><br>
+        <strong>Event formula:</strong> Incentives + Numbers + Personalities + Convenience + Personal conviction. Direct ask beats poll.<br><br>
+        <strong>Prayer morning:</strong> Half prayer, half breakfast. Cross-generational. Sorely lacking.<br><br>
+        <strong>St David's:</strong> Inter-church collab pending priority decision.
+      </div>
+    </div>
+  </div>
+
+  <div id="res-dinners" class="res-section">
+    <div class="card">
+      <div class="card-title">Easy group dinners (5–10 people)</div>
+      <div id="din-list"></div>
+      <div class="add-res-row"><input id="din-new" placeholder="Add dinner idea..." /><button class="btn btn-primary" onclick="addRes('din')">+</button></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Guided conversation questions</div>
+      <div id="qn-list"></div>
+      <div class="add-res-row"><input id="qn-new" placeholder="Add question..." /><button class="btn btn-primary" onclick="addRes('qn')">+</button></div>
+    </div>
+  </div>
+
+  <div id="res-generator" class="res-section">
+    <div class="card">
+      <div class="card-title">Generate content</div>
+      <div class="gen-grid">
+        <div class="gen-card active" id="gc-conv" onclick="setGen('conv')"><h4>💬 Conversation questions</h4><p>For evangelism evenings</p></div>
+        <div class="gen-card" id="gc-mat" onclick="setGen('mat')"><h4>📖 Maturity study guide</h4><p>Spiritual Milk themes</p></div>
+        <div class="gen-card" id="gc-outline" onclick="setGen('outline')"><h4>🗓 Event outline</h4><p>Full run sheet</p></div>
+        <div class="gen-card" id="gc-spotlight" onclick="setGen('spotlight')"><h4>🔦 Spotlight twists</h4><p>Creative game variations</p></div>
+        <div class="gen-card" id="gc-talk" onclick="setGen('talk')"><h4>🎤 Talk framework</h4><p>10-min talk</p></div>
+        <div class="gen-card" id="gc-prayer" onclick="setGen('prayer')"><h4>🙏 Prayer guide</h4><p>Structured group prayer</p></div>
+      </div>
+      <select id="gen-topic" style="margin-bottom:8px;">
+        <option value="">Optional topic...</option>
+        <option value="Deconstructing lies">Deconstructing lies</option>
+        <option value="The promises of God">The promises of God</option>
+        <option value="Unity in Christ">Unity in Christ</option>
+        <option value="Christian fears">Christian fears</option>
+        <option value="Spiritual Milk vs Solid Food">Spiritual Milk vs Solid Food</option>
+        <option value="Counterfeit Christianity">Counterfeit Christianity</option>
+        <option value="Counting the cost">Counting the cost</option>
+        <option value="Pride and humility">Pride and humility</option>
+        <option value="Identity in Christ">Identity in Christ</option>
+        <option value="The deceitful heart">The deceitful heart</option>
+      </select>
+      <input id="gen-custom" placeholder="Or type a custom topic..." style="margin-bottom:9px;" />
+      <button class="btn btn-primary" style="width:100%;" id="gen-btn" onclick="runGen()">Generate</button>
+      <div id="gen-out" class="gen-output"></div>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIO JOURNAL -->
+<div id="journal" class="section">
+  <div class="card">
+    <div class="card-title">Voice Journal</div>
+    <div class="info-block">Tap Record to capture a thought. Your browser will transcribe it in real-time using speech recognition. Entries are saved locally and can be edited.</div>
+    <div class="audio-timer" id="rec-timer">0:00</div>
+    <div id="rec-wave" class="waveform" style="display:none;justify-content:center;">
+      <div class="wave-bar" style="background:#e53935;"></div>
+      <div class="wave-bar" style="background:#e53935;"></div>
+      <div class="wave-bar" style="background:#e53935;"></div>
+      <div class="wave-bar" style="background:#e53935;"></div>
+      <div class="wave-bar" style="background:#e53935;"></div>
+    </div>
+    <div class="audio-status" id="rec-status">Tap record to begin</div>
+    <button class="btn-record" id="rec-btn" onclick="toggleRecording()">🎙 Start Recording</button>
+    <div id="live-transcript" style="background:#f0f4f8;border-radius:8px;padding:10px;font-size:13px;color:#555;min-height:40px;margin-bottom:8px;display:none;"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Saved entries</div>
+    <div id="journal-list"><div class="empty">No entries yet</div></div>
+  </div>
+</div>
+
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const TIERS = {close:'Close brothers',girlfriend:'Girlfriend (Rachel)',church:'Church community',coleaders:'Co-leaders',y13:'Year 13 cohort',evangelism:'Evangelism contacts',mission:'Mission partners'};
+const TIER_ORDER = ['close','girlfriend','church','coleaders','y13','evangelism','mission'];
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const SUBJECTS = [
+  {id:'polec',name:'Political Economics',tasks:['Lecture','Readings','Summary']},
+  {id:'pols', name:'Politics',           tasks:['Lecture','Readings','Summary']},
+  {id:'phil', name:'Philosophy',         tasks:['Lecture','Readings','Summary']},
+  {id:'econ', name:'Economics',          tasks:['Lecture','Readings','Summary']},
+];
+const DEFAULTS = {
+  ev:['Spotlight — torch & hide outdoors, mission card twist or timed forced-run','Dinner + 3 guided conversation questions (see Dinners tab)','Trivia night — mixed teams, 1 big questions round','Park cricket / social sport → natural conversation','Anonymous question box — submit questions, answer together','Geocache hunt with reflection stations','Cook together — everyone brings one ingredient','Codenames / Wavelength / Jackbox','Run club — informal, wide ability range','Chalkboard question — post-sermon conversation starter'],
+  mat:['"The Lie I Believed" — testimony + scripture + discussion','Scripture deep-dive — one passage, honest wrestling','Spiritual audit — prayer life, sin patterns, where God feels distant','"What does the Bible actually say about ___"','Plug the prayer doc — add one point for someone before leaving','Accountability pairs — intentional check-in','Spiritual Train Tracks — hold the tensions in paradox','"Counterfeit Christianity" — the Callum mirror exercise','MAPS — who are you modelling, articulating, praying, systematising for?'],
+  com:['Shared meal with real conversation questions','Serve together + debrief','Testimony night — one person\'s full story','Skills swap — teach what you\'re good at + connect to serving God','Letter writing to people you\'re praying for','Sunrise Bible + coffee (Cafe Chats style)','Prayer morning — half prayer, half breakfast','Crafternoon — intergenerational, Sunday arvo','Board games / Spikeball / footy / frisbee','Informal Bible study — church space, evening, drinks'],
+  din:['Pasta bake — easy, bulk, make ahead','Mince burrito / taco bar — build your own ~$8-10/head','Nachos — crowd favourite, minimal effort','Snags + bread — BBQ, cheap, social','Homemade pizzas — interactive, fun for groups','Chicken stir fry + rice — fast, affordable','Soup + crusty bread — winter, comforting'],
+  qn:['What\'s something you\'ve changed your mind about in the last few years?','Do you think people are basically good? What shaped that view?','What\'s one thing you think about more than you expected to at this age?','What does a meaningful life actually look like to you?','Is there anything you used to believe that you\'ve quietly walked away from?','What\'s the most significant thing someone has ever said to you?']
+};
+
+// ── STORAGE ───────────────────────────────────────────────────────────────────
+function ld(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
+
+let prayers   = ld('ih-prayers',[]);
+let deadlines = ld('ih-deadlines',[]);
+let study     = ld('ih-study-v3',{});
+let jEntries  = ld('ih-journal',[]);
+
+function initRes(k,d){const s=ld('ih-res-'+k,null);if(s)return s;const i=d.map((t,n)=>({id:n+1,text:t,feedback:[]}));sv('ih-res-'+k,i);return i;}
+let resEv=initRes('ev',DEFAULTS.ev),resMat=initRes('mat',DEFAULTS.mat),resCom=initRes('com',DEFAULTS.com),resDin=initRes('din',DEFAULTS.din),resQn=initRes('qn',DEFAULTS.qn);
+function saveRes(){sv('ih-res-ev',resEv);sv('ih-res-mat',resMat);sv('ih-res-com',resCom);sv('ih-res-din',resDin);sv('ih-res-qn',resQn);}
+
+// ── TABS ──────────────────────────────────────────────────────────────────────
+function sw(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById(t).classList.add('active');
+}
+function swRes(t){
+  document.querySelectorAll('.res-tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.res-section').forEach(s=>s.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('res-'+t).classList.add('active');
+}
+
+// ── TODAY — random prayer rotation ───────────────────────────────────────────
+function getDaySeed(){
+  const d=new Date();
+  return d.getFullYear()*10000+d.getMonth()*100+d.getDate();
+}
+function seededRandom(seed){
+  let s=seed;
+  return function(){s=(s*9301+49297)%233280;return s/233280;};
+}
+function getTodayPrayers(){
+  if(!prayers.length) return [];
+  const seed=getDaySeed();
+  const rng=seededRandom(seed);
+  // shuffle all prayers deterministically for today
+  const shuffled=[...prayers].sort(()=>rng()-0.5);
+  // take up to 4 for display
+  return shuffled.slice(0,4);
+}
+function getExpiringPrayers(){
+  // prayers where lastPrayed was >14 days ago or never prayed in >21 days
+  const now=Date.now();
+  return prayers.filter(p=>{
+    if(!p.lastPrayed) return false; // never prayed — not expiring, just not started
+    const last=new Date(p.lastPrayed).getTime();
+    const days=(now-last)/(1000*60*60*24);
+    return days>=14;
+  });
+}
+function renderToday(){
+  const now=new Date();
+  document.getElementById('hdr-date').textContent=now.toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
+  const day=now.getDay();
+  document.getElementById('t-tier').textContent="🙏 Today's prayer focus";
+  const todayPrayers=getTodayPrayers();
+  const expiring=getExpiringPrayers();
+  const expiringIds=new Set(expiring.map(p=>p.id));
+  const pEl=document.getElementById('t-points');
+  if(!todayPrayers.length){
+    pEl.innerHTML='<div style="font-size:13px;opacity:0.8;">No prayer people added yet</div>';
+  } else {
+    pEl.innerHTML=todayPrayers.map(p=>`
+      <div class="prayer-point-pill${expiringIds.has(p.id)?' expiring':''}">
+        <div class="pp-name">${p.name} ${expiringIds.has(p.id)?'<span style="font-size:10px;opacity:0.8;">⏰ needs prayer</span>':''}</div>
+        ${p.focus?`<div class="pp-focus">${p.focus}</div>`:''}
+        ${p.points&&p.points.length?`<div class="pp-focus" style="margin-top:3px;">• ${p.points.filter(x=>!x.done).map(x=>x.text).slice(0,2).join(' • ')}</div>`:''}
+      </div>`).join('');
+  }
+  document.getElementById('day-row').innerHTML=DAYS.map((d,i)=>`
+    <div class="day-cell${i===day?' today-cell':''}">
+      <div class="dn">${d}</div>
+      <div class="dt">🙏</div>
+    </div>`).join('');
+  // expiring block
+  const expCard=document.getElementById('expiring-card');
+  const expList=document.getElementById('expiring-list');
+  if(expiring.length){
+    expCard.style.display='block';
+    expList.innerHTML=expiring.map(p=>`
+      <div class="item">
+        <div><div class="item-name">${p.name}</div><div class="item-sub">Last prayed: ${p.lastPrayed}</div></div>
+        <span class="badge b-expiring">Needs prayer</span>
+      </div>`).join('');
+  } else { expCard.style.display='none'; }
+  // deadlines
+  const up=deadlines.filter(d=>{const x=Math.ceil((new Date(d.date)-now)/86400000);return x>=0&&x<=7;}).sort((a,b)=>a.date.localeCompare(b.date));
+  document.getElementById('t-deadlines').innerHTML=up.length?up.map(d=>`<div class="item"><div><div class="item-name">${d.name}</div><div class="item-sub">${d.type} · ${d.date}</div></div>${urgBadge(d.date)}</div>`).join(''):'<div class="empty">Nothing due this week 🎉</div>';
+}
+
+// ── PRAYER ────────────────────────────────────────────────────────────────────
+function addPrayer(){
+  const name=document.getElementById('p-name').value.trim();
+  const tier=document.getElementById('p-tier').value;
+  const focus=document.getElementById('p-focus').value.trim();
+  const notes=document.getElementById('p-notes').value.trim();
+  if(!name)return;
+  prayers.push({id:Date.now(),name,tier,focus,notes,lastPrayed:null,points:[]});
+  sv('ih-prayers',prayers);renderPrayer();renderToday();
+  ['p-name','p-focus','p-notes'].forEach(id=>document.getElementById(id).value='');
+}
+function prayedFor(id){
+  prayers=prayers.map(p=>p.id===id?{...p,lastPrayed:new Date().toISOString().split('T')[0]}:p);
+  sv('ih-prayers',prayers);renderPrayer();renderToday();
+}
+function delPrayer(id){
+  prayers=prayers.filter(p=>p.id!==id);
+  sv('ih-prayers',prayers);renderPrayer();renderToday();
+}
+function addPoint(pid){
+  const input=document.getElementById('pp-input-'+pid);
+  if(!input)return;
+  const txt=input.value.trim();
+  if(!txt)return;
+  prayers=prayers.map(p=>{
+    if(p.id===pid){
+      const points=p.points||[];
+      points.push({id:Date.now(),text:txt,done:false,added:new Date().toISOString().split('T')[0]});
+      return {...p,points};
+    }
+    return p;
+  });
+  sv('ih-prayers',prayers);input.value='';renderPrayer();
+}
+function togglePoint(pid,ptid){
+  prayers=prayers.map(p=>{
+    if(p.id===pid){
+      const points=(p.points||[]).map(pt=>pt.id===ptid?{...pt,done:!pt.done}:pt);
+      return {...p,points};
+    }
+    return p;
+  });
+  sv('ih-prayers',prayers);renderPrayer();
+}
+function delPoint(pid,ptid){
+  prayers=prayers.map(p=>{
+    if(p.id===pid){
+      return {...p,points:(p.points||[]).filter(pt=>pt.id!==ptid)};
+    }
+    return p;
+  });
+  sv('ih-prayers',prayers);renderPrayer();
+}
+function renderPrayer(){
+  const el=document.getElementById('prayer-list');
+  if(!prayers.length){el.innerHTML='<div class="empty">No one added yet</div>';return;}
+  const bt={};TIER_ORDER.forEach(t=>bt[t]=[]);
+  prayers.forEach(p=>{if(bt[p.tier])bt[p.tier].push(p);});
+  el.innerHTML=TIER_ORDER.filter(t=>bt[t].length).map(tier=>`
+    <div class="tier-lbl">${TIERS[tier]}</div>
+    ${bt[tier].map(p=>`
+      <div class="prayer-item">
+        <div class="prayer-item-header">
+          <div class="prayer-item-body">
+            <div class="prayer-item-name">${esc(p.name)}</div>
+            ${p.focus?`<div class="prayer-item-focus">${esc(p.focus)}</div>`:''}
+            ${p.notes?`<div class="prayer-item-note">${esc(p.notes)}</div>`:''}
+            ${p.lastPrayed?`<div class="prayer-item-last">Last prayed: ${p.lastPrayed}</div>`:''}
+          </div>
+          <div class="row-btns">
+            <button class="btn-green" onclick="prayedFor(${p.id})">✓ Prayed</button>
+            <button class="btn-red" onclick="delPrayer(${p.id})">×</button>
+          </div>
+        </div>
+        <div class="prayer-item-points">
+          ${(p.points||[]).map(pt=>`
+            <div class="prayer-point-row">
+              <span class="prayer-point-text${pt.done?' done':''}">${esc(pt.text)}</span>
+              <div class="row-btns">
+                <button class="btn-sm" onclick="togglePoint(${p.id},${pt.id})">${pt.done?'↩':'✓'}</button>
+                <button class="btn-red" onclick="delPoint(${p.id},${pt.id})">×</button>
+              </div>
+            </div>`).join('')}
+          <div class="add-point-row">
+            <input id="pp-input-${p.id}" placeholder="Add prayer point..." onkeydown="if(event.key==='Enter')addPoint(${p.id})" />
+            <button class="btn-sm" onclick="addPoint(${p.id})">+ Point</button>
+          </div>
+        </div>
+      </div>`).join('')}`).join('');
+}
+
+// ── DEADLINES ────────────────────────────────────────────────────────────────
+function addDeadline(){
+  const name=document.getElementById('d-name').value.trim();
+  const date=document.getElementById('d-date').value;
+  const type=document.getElementById('d-type').value;
+  if(!name||!date)return;
+  deadlines.push({id:Date.now(),name,date,type});
+  deadlines.sort((a,b)=>a.date.localeCompare(b.date));
+  sv('ih-deadlines',deadlines);renderDeadlines();renderToday();
+  document.getElementById('d-name').value='';document.getElementById('d-date').value='';
+}
+function delDeadline(id){deadlines=deadlines.filter(d=>d.id!==id);sv('ih-deadlines',deadlines);renderDeadlines();renderToday();}
+function urgBadge(date){
+  const d=Math.ceil((new Date(date)-new Date())/86400000);
+  if(d<0)return'<span class="badge b-urgent">Overdue</span>';
+  if(d<=2)return'<span class="badge b-urgent">Due soon</span>';
+  if(d<=7)return`<span class="badge b-soon">${d}d</span>`;
+  return`<span class="badge b-ok">${d}d</span>`;
+}
+function typeBadge(t){
+  if(t==='rachel')return'<span class="badge b-rachel">Rachel</span>';
+  if(['quiz','assignment'].includes(t))return`<span class="badge b-study">${t}</span>`;
+  if(t==='ministry')return'<span class="badge b-ministry">Ministry</span>';
+  return`<span class="badge b-prayer">${t}</span>`;
+}
+function renderDeadlines(){
+  const el=document.getElementById('deadline-list');
+  if(!deadlines.length){el.innerHTML='<div class="empty">No deadlines yet</div>';return;}
+  el.innerHTML='<div class="card" style="padding:11px 14px;">'+deadlines.map(d=>`
+    <div class="item">
+      <div><div class="item-name">${esc(d.name)}</div><div class="item-sub">${d.date}</div></div>
+      <div class="row-btns">${typeBadge(d.type)}${urgBadge(d.date)}<button class="btn-red" onclick="delDeadline(${d.id})">×</button></div>
+    </div>`).join('')+'</div>';
+}
+
+// ── STUDY — rebuilt with custom checkboxes ─────────────────────────────────
+function renderStudy(){
+  document.getElementById('subj-grid').innerHTML=SUBJECTS.map(s=>`
+    <div class="subj-card">
+      <div class="subj-title">${s.name}</div>
+      ${s.tasks.map(t=>{
+        const k=s.id+'__'+t;
+        const done=!!study[k];
+        return `<div class="chk-row" onclick="toggleStudy('${k}')">
+          <div class="chk-box${done?' checked':''}" id="cb-${k}"></div>
+          <span class="chk-label${done?' checked':''}" id="cl-${k}">${t}</span>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function toggleStudy(k){
+  study[k]=!study[k];
+  sv('ih-study-v3',study);
+  const cb=document.getElementById('cb-'+k);
+  const cl=document.getElementById('cl-'+k);
+  if(cb){cb.classList.toggle('checked',study[k]);}
+  if(cl){cl.classList.toggle('checked',study[k]);}
+}
+function resetStudy(){study={};sv('ih-study-v3',study);renderStudy();}
+
+// ── RESOURCES ────────────────────────────────────────────────────────────────
+function getRL(k){return{ev:resEv,mat:resMat,com:resCom,din:resDin,qn:resQn}[k];}
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function renderRL(key,elId){
+  const list=getRL(key),el=document.getElementById(elId);
+  if(!list||!list.length){el.innerHTML='<div class="empty">Nothing yet</div>';return;}
+  el.innerHTML=list.map(item=>`
+    <div class="res-item">
+      <div class="res-item-header">
+        <div class="res-item-text" id="rt-${key}-${item.id}">${esc(item.text)}</div>
+        <textarea class="res-edit-input" id="re-${key}-${item.id}">${esc(item.text)}</textarea>
+        <div style="display:flex;gap:4px;flex-shrink:0;margin-top:2px;">
+          <button class="btn-sm" id="eb-${key}-${item.id}" onclick="startEdit('${key}',${item.id})">✏️</button>
+          <button class="btn-red" onclick="delRes('${key}',${item.id})">×</button>
+        </div>
+      </div>
+      <div class="res-feedback">
+        <ul class="feedback-list" id="fl-${key}-${item.id}">
+          ${(item.feedback||[]).map(f=>`<li>${esc(f)}<button class="btn-red" style="font-size:10px;margin-left:4px;" onclick="delFb('${key}',${item.id},${JSON.stringify(f)})">×</button></li>`).join('')}
+        </ul>
+        <div class="feedback-input-row">
+          <input id="fi-${key}-${item.id}" placeholder="Add feedback or note..." onkeydown="if(event.key==='Enter')addFb('${key}',${item.id})" />
+          <button class="btn-orange" onclick="addFb('${key}',${item.id})">+ Note</button>
+        </div>
+      </div>
+    </div>`).join('');
+}
+function startEdit(key,id){
+  const t=document.getElementById(`rt-${key}-${id}`);
+  const i=document.getElementById(`re-${key}-${id}`);
+  const b=document.getElementById(`eb-${key}-${id}`);
+  if(!t||!i||!b)return;
+  const ed=i.classList.contains('editing');
+  if(ed){
+    const item=getRL(key).find(x=>x.id===id);
+    if(item){item.text=i.value.trim();saveRes();}
+    t.textContent=i.value.trim();
+    t.classList.remove('editing');i.classList.remove('editing');b.textContent='✏️';
+  }else{
+    t.classList.add('editing');i.classList.add('editing');i.focus();b.textContent='💾';
+  }
+}
+function delRes(key,id){
+  if(key==='ev')resEv=resEv.filter(i=>i.id!==id);
+  else if(key==='mat')resMat=resMat.filter(i=>i.id!==id);
+  else if(key==='com')resCom=resCom.filter(i=>i.id!==id);
+  else if(key==='din')resDin=resDin.filter(i=>i.id!==id);
+  else if(key==='qn')resQn=resQn.filter(i=>i.id!==id);
+  saveRes();renderAllRes();
+}
+function addRes(key){
+  const ids={ev:'ev-new',mat:'mat-new',com:'com-new',din:'din-new',qn:'qn-new'};
+  const val=document.getElementById(ids[key]).value.trim();if(!val)return;
+  const n={id:Date.now(),text:val,feedback:[]};
+  if(key==='ev')resEv.push(n);else if(key==='mat')resMat.push(n);
+  else if(key==='com')resCom.push(n);else if(key==='din')resDin.push(n);else if(key==='qn')resQn.push(n);
+  saveRes();renderAllRes();document.getElementById(ids[key]).value='';
+}
+function addFb(key,id){
+  const el=document.getElementById(`fi-${key}-${id}`);
+  if(!el)return;
+  const val=el.value.trim();if(!val)return;
+  const item=getRL(key).find(i=>i.id===id);
+  if(item){item.feedback=item.feedback||[];item.feedback.push(val);saveRes();}
+  el.value='';renderAllRes();
+}
+function delFb(key,id,f){
+  const item=getRL(key).find(i=>i.id===id);
+  if(item){item.feedback=(item.feedback||[]).filter(x=>x!==f);saveRes();}renderAllRes();
+}
+function renderAllRes(){
+  renderRL('ev','ev-list');renderRL('mat','mat-list');renderRL('com','com-list');
+  renderRL('din','din-list');renderRL('qn','qn-list');
+}
+
+// ── AI GENERATOR ──────────────────────────────────────────────────────────────
+let genType='conv';
+function setGen(t){
+  document.querySelectorAll('.gen-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('gc-'+t).classList.add('active');genType=t;
+}
+async function runGen(){
+  const topic=document.getElementById('gen-topic').value||document.getElementById('gen-custom').value||'';
+  const out=document.getElementById('gen-out');
+  out.style.display='block';out.className='gen-output loading';out.textContent='Generating...';
+  document.getElementById('gen-btn').textContent='Generating...';
+  const ctx=`Isaac runs young adult ministry at FFAC (Frenchs Forest Anglican Church) Sydney. Cafe Chats 1-on-1 discipleship, evangelism evenings, maturity nights. His book thesis: "where we find our value determines our spiritual maturity." Crowd: 18-30, mix Christians and non-Christians, Northern Beaches Sydney.`;
+  const prompts={
+    conv:`${ctx}\n\n5 non-confrontational conversation questions for an evangelism dinner (mostly non-Christians). Genuinely curious, not churchy. ${topic?'Theme: '+topic+'.':''} Numbered list, one sentence on why each works.`,
+    mat:`${ctx}\n\nMaturity discussion guide. ${topic?'Focus: '+topic+'.':'Counterfeit Christianity + deeper faith.'} 3-min framing talk (bullets), 3 discussion questions, one practical step. Sharp and honest.`,
+    outline:`${ctx}\n\nFull evening run sheet. ${topic?'Theme: '+topic+'.':'Community and maturity.'} Arrival/dinner 20min, welcome/prayer 5min, content/discussion 25min, activity 20min, debrief 10min. Specific and practical.`,
+    spotlight:`${ctx}\n\n5 creative twists for Spotlight — torch hide-and-seek outdoors. Young adults 18-30, casual social, not youth ministry. Fun, brief, practical.`,
+    talk:`${ctx}\n\n10-minute talk framework. ${topic?'Topic: '+topic+'.':'Where we find our value.'} Hook 1min, problem 3min, biblical anchor + passage 3min, application 2min, closing 1min. Dot points.`,
+    prayer:`${ctx}\n\nGroup prayer guide 6-12 young adults. ${topic?'Theme: '+topic+'.':''} Opening verse, 4 prayer categories with prompts, closing blessing. Grounded and specific.`
+  };
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompts[genType]}]})});
+    const data=await res.json();
+    out.className='gen-output';out.textContent=data.content?.[0]?.text||'Something went wrong.';
+  }catch(e){out.className='gen-output';out.textContent='Connection error — check you\'re online.';}
+  document.getElementById('gen-btn').textContent='Generate';
+}
+
+// ── AUDIO JOURNAL ─────────────────────────────────────────────────────────────
+let recognition=null,isRecording=false,recInterval=null,recSeconds=0,liveText='';
+
+function initSpeech(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR)return null;
+  const r=new SR();
+  r.continuous=true;r.interimResults=true;r.lang='en-AU';
+  r.onresult=e=>{
+    let interim='',final='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      if(e.results[i].isFinal)final+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    if(final)liveText+=final+' ';
+    const lt=document.getElementById('live-transcript');
+    if(lt){lt.textContent=(liveText+interim)||'Listening...';}
+  };
+  r.onerror=e=>{
+    if(e.error!=='no-speech'){document.getElementById('rec-status').textContent='Error: '+e.error;}
+  };
+  return r;
+}
+
+function toggleRecording(){
+  if(!isRecording){startRec();}else{stopRec();}
+}
+
+function startRec(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){
+    document.getElementById('rec-status').textContent='Speech recognition not supported in this browser. Try Chrome or Safari on iOS 17+.';
+    return;
+  }
+  recognition=initSpeech();
+  if(!recognition)return;
+  liveText='';isRecording=true;recSeconds=0;
+  const btn=document.getElementById('rec-btn');
+  const wave=document.getElementById('rec-wave');
+  const lt=document.getElementById('live-transcript');
+  btn.textContent='⏹ Stop Recording';btn.classList.add('recording');
+  wave.style.display='flex';if(lt)lt.style.display='block';
+  document.getElementById('rec-status').textContent='Recording...';
+  recognition.start();
+  recInterval=setInterval(()=>{
+    recSeconds++;
+    const m=Math.floor(recSeconds/60),s=recSeconds%60;
+    document.getElementById('rec-timer').textContent=m+':'+(s<10?'0':'')+s;
+  },1000);
+}
+
+function stopRec(){
+  isRecording=false;
+  if(recognition){try{recognition.stop();}catch(e){}}
+  clearInterval(recInterval);
+  const btn=document.getElementById('rec-btn');
+  const wave=document.getElementById('rec-wave');
+  btn.textContent='🎙 Start Recording';btn.classList.remove('recording');
+  wave.style.display='none';
+  document.getElementById('rec-status').textContent='Entry saved';
+  document.getElementById('rec-timer').textContent='0:00';
+  const text=liveText.trim();
+  if(text){
+    const entry={
+      id:Date.now(),
+      date:new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}),
+      text:text
+    };
+    jEntries.unshift(entry);
+    sv('ih-journal',jEntries);
+    renderJournal();
+  }
+  const lt=document.getElementById('live-transcript');
+  if(lt){lt.textContent='';lt.style.display='none';}
+  liveText='';recSeconds=0;
+}
+
+function delJEntry(id){
+  jEntries=jEntries.filter(e=>e.id!==id);
+  sv('ih-journal',jEntries);renderJournal();
+}
+function editJEntry(id){
+  const entry=jEntries.find(e=>e.id===id);if(!entry)return;
+  const textEl=document.getElementById('jt-'+id);
+  const editEl=document.getElementById('je-'+id);
+  const btn=document.getElementById('jeb-'+id);
+  if(!textEl||!editEl||!btn)return;
+  const ed=editEl.classList.contains('editing-t');
+  if(ed){
+    entry.text=editEl.value;sv('ih-journal',jEntries);
+    textEl.textContent=editEl.value;
+    textEl.classList.remove('editing-t');editEl.classList.remove('editing-t');btn.textContent='✏️';
+  }else{
+    textEl.classList.add('editing-t');editEl.classList.add('editing-t');editEl.focus();btn.textContent='💾';
+  }
+}
+function renderJournal(){
+  const el=document.getElementById('journal-list');
+  if(!jEntries.length){el.innerHTML='<div class="empty">No entries yet — tap record to begin</div>';return;}
+  el.innerHTML=jEntries.map(e=>`
+    <div class="transcript-entry">
+      <div class="transcript-entry-header">
+        <div class="transcript-entry-date">${e.date}</div>
+        <div class="row-btns">
+          <button class="btn-sm" id="jeb-${e.id}" onclick="editJEntry(${e.id})">✏️</button>
+          <button class="btn-red" onclick="delJEntry(${e.id})">×</button>
+        </div>
+      </div>
+      <div class="transcript-entry-text" id="jt-${e.id}">${esc(e.text)}</div>
+      <textarea class="transcript-edit-area" id="je-${e.id}">${esc(e.text)}</textarea>
+    </div>`).join('');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderToday();renderPrayer();renderDeadlines();renderStudy();renderAllRes();renderJournal();setGen('conv');
+</script>
+</body>
+</html>
