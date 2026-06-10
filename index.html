@@ -274,6 +274,13 @@
   #loading-screen p { font-size: 13px; opacity: 0.6; }
   .spinner { width: 28px; height: 28px; border: 3px solid rgba(255,255,255,0.2); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── JOURNAL ── */
+  @keyframes wave { 0%,100%{height:6px} 50%{height:24px} }
+  .j-entry { background: #fafaf8; border: 1px solid var(--border); border-radius: 10px; padding: 12px 13px; margin-bottom: 7px; }
+  .j-entry-date { font-size: 11px; font-weight: 700; color: var(--navy); margin-bottom: 5px; }
+  .j-entry-text { font-size: 13px; color: #333; line-height: 1.6; white-space: pre-wrap; }
+  .j-edit-area { display: none; width: 100%; font-size: 13px; min-height: 70px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -286,7 +293,7 @@
 
 <header>
   <div>
-    <h1>⚓ Isaac's Fig Tree</h1>
+    <h1>🌿 Isaac's Fig Tree</h1>
     <p id="date-display"></p>
   </div>
   <div class="sync-dot" id="sync-dot" title="Sync status"></div>
@@ -300,6 +307,7 @@
   <div class="tab" onclick="switchTab('study')">Study</div>
   <div class="tab" onclick="switchTab('resources')">Resources</div>
   <div class="tab" onclick="switchTab('scripture')">Scripture</div>
+  <div class="tab" onclick="switchTab('journal')">Journal</div>
 </div>
 
 <!-- TODAY -->
@@ -312,6 +320,16 @@
   <div class="votd" id="votd-card">
     <div class="votd-ref" id="votd-ref">Verse of the Day</div>
     <div class="votd-text votd-loading" id="votd-text">Loading...</div>
+  </div>
+  <div class="card" id="expiring-card" style="display:none;border-left:3px solid var(--orange);">
+    <div onclick="toggleExpiringCard()" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">
+      <h3 style="color:var(--orange);margin-bottom:0;">⏱ Archiving tomorrow</h3>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span id="expiring-count" style="font-size:11px;color:var(--orange);font-weight:600;"></span>
+        <span id="expiring-chev" style="font-size:11px;color:var(--orange);transition:transform 0.2s;">▼</span>
+      </div>
+    </div>
+    <div id="expiring-body" style="margin-top:10px;display:none;"></div>
   </div>
   <div class="card">
     <h3>Current prayer points</h3>
@@ -410,9 +428,20 @@
     <h3>Weekly checklist</h3>
     <div class="subject-grid" id="subject-grid"></div>
   </div>
+  <div class="card" id="edit-subjects-card" style="display:none;">
+    <h3>Edit subjects</h3>
+    <div id="edit-subjects-list"></div>
+    <div style="display:flex;gap:6px;margin-top:8px;">
+      <input type="text" id="new-subject-name" placeholder="Subject name..." style="margin:0;flex:1;" />
+      <button class="btn-xs" onclick="addSubject()">Add</button>
+    </div>
+    <button class="btn btn-primary" style="margin-top:10px;" onclick="toggleEditSubjects()">Done</button>
+  </div>
   <div class="card">
-    <h3>Reset week</h3>
-    <button class="btn-sm" onclick="resetStudy()">New week — clear all tasks</button>
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;">
+      <button class="btn-sm" onclick="resetStudy()">New week — clear all ✓</button>
+      <button class="btn-sm" onclick="toggleEditSubjects()">✏️ Edit subjects</button>
+    </div>
   </div>
 </div>
 
@@ -458,6 +487,30 @@
     <button class="btn btn-primary" onclick="addScripture()">Add to memory list</button>
   </div>
   <div id="sv-category-list"></div>
+</div>
+
+<!-- JOURNAL -->
+<div id="journal" class="section">
+  <div class="info-banner">
+    🎙 Tap Record to capture a thought. Speech recognition transcribes in real-time. Works in Chrome and Safari iOS 17+. Entries saved to your database.
+  </div>
+  <div class="card">
+    <div id="rec-timer" style="font-size:28px;font-weight:700;color:var(--navy);text-align:center;padding:6px 0;">0:00</div>
+    <div id="rec-wave" style="display:none;justify-content:center;gap:3px;height:36px;align-items:center;margin:4px 0;">
+      <div style="width:4px;border-radius:2px;background:#e53935;animation:wave 0.8s ease-in-out infinite;"></div>
+      <div style="width:4px;border-radius:2px;background:#e53935;animation:wave 0.8s ease-in-out 0.1s infinite;"></div>
+      <div style="width:4px;border-radius:2px;background:#e53935;animation:wave 0.8s ease-in-out 0.2s infinite;"></div>
+      <div style="width:4px;border-radius:2px;background:#e53935;animation:wave 0.8s ease-in-out 0.3s infinite;"></div>
+      <div style="width:4px;border-radius:2px;background:#e53935;animation:wave 0.8s ease-in-out 0.4s infinite;"></div>
+    </div>
+    <div id="rec-status" style="text-align:center;font-size:13px;color:var(--muted);padding:4px 0 8px;">Tap record to begin</div>
+    <button id="rec-btn" onclick="toggleRecording()" style="background:#e53935;color:white;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px;">🎙 Start Recording</button>
+    <div id="live-transcript" style="background:#f0f4f8;border-radius:8px;padding:10px;font-size:13px;color:#555;min-height:40px;display:none;line-height:1.5;"></div>
+  </div>
+  <div class="card">
+    <h3>Saved entries</h3>
+    <div id="journal-list"><div class="empty">No entries yet — tap record to begin</div></div>
+  </div>
 </div>
 
 <!-- EDIT PP MODAL -->
@@ -523,12 +576,17 @@ let TIERS = _tc.tiers;
 let TIER_ORDER = _tc.order;
 let ROTATION = _tc.order;
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const SUBJECTS = [
+const DEFAULT_SUBJECTS = [
   {id:'polec', name:'Political Economics', tasks:['Lecture','Readings','Summary']},
   {id:'pols',  name:'Politics',            tasks:['Lecture','Readings','Summary']},
   {id:'phil',  name:'Philosophy',          tasks:['Lecture','Readings','Summary']},
   {id:'econ',  name:'Economics',           tasks:['Lecture','Readings','Summary']},
 ];
+function getSubjects() {
+  try { const s = JSON.parse(localStorage.getItem('ih-subjects') || 'null'); return s || DEFAULT_SUBJECTS; } catch { return DEFAULT_SUBJECTS; }
+}
+function saveSubjects(s) { try { localStorage.setItem('ih-subjects', JSON.stringify(s)); } catch {} }
+let SUBJECTS = getSubjects();
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let prayers = [];
 let deadlines = [];
@@ -555,6 +613,7 @@ async function init() {
     loadStudy().catch(e => {}),
     loadScriptures().catch(e => console.warn('scriptures:', e)),
     loadResources().catch(e => console.warn('resources:', e)),
+    loadJournal().catch(e => console.warn('journal:', e)),
   ]);
   setSyncing('ok');
   document.getElementById('loading-screen').style.display = 'none';
@@ -571,6 +630,7 @@ function renderAll() {
   renderStudy();
   renderResources();
   renderScriptures();
+  renderJournal();
 }
 
 // ── SUPABASE HELPERS ──────────────────────────────────────────────────────────
@@ -605,46 +665,69 @@ function renderToday() {
   const now = new Date();
   document.getElementById('date-display').textContent = now.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
   const day = now.getDay();
-  const tier = ROTATION[day % ROTATION.length];
+
+  // Random daily rotation — seeded by date so consistent all day but different each day
+  const dateSeed = parseInt(now.toISOString().split('T')[0].replace(/-/g,''), 10);
+  function seededR(n) { let s = (dateSeed + n * 7919) * 9301 + 49297; return (s % 233280) / 233280; }
+  const shuffledRotation = [...ROTATION].sort((a, b) => seededR(ROTATION.indexOf(a)) - seededR(ROTATION.indexOf(b)));
+  const tier = shuffledRotation[0];
+
   document.getElementById('today-tier').textContent = '🙏 Praying for: ' + TIERS[tier];
   const people = prayers.filter(p => p.tier === tier);
   document.getElementById('today-people').textContent = people.length ? people.map(p=>p.name).join(', ') : 'No one added yet for this tier';
 
   const grid = document.getElementById('day-row');
-  grid.innerHTML = DAYS.map((d,i) => `<div class="day-cell dc-${i}${i===day?' today':''}"><div class="day-name">${d}</div><div class="tier-short">${TIERS[ROTATION[i%ROTATION.length]].split(' ')[0]}</div></div>`).join('');
+  grid.innerHTML = DAYS.map((d,i) => `<div class="day-cell dc-${i}${i===day?' today':''}"><div class="day-name">${d}</div><div class="tier-short">${TIERS[shuffledRotation[i%shuffledRotation.length]].split(' ')[0]}</div></div>`).join('');
+
+  // ── EXPIRING CARD (archiving in ≤1 day, collapsible) ──
+  const expiring = prayerPoints.filter(p => p.type === 'current' && !p.archived && daysUntilArchive(p) <= 1);
+  const expCard = document.getElementById('expiring-card');
+  const expBody = document.getElementById('expiring-body');
+  const expCount = document.getElementById('expiring-count');
+  if (expiring.length) {
+    expCard.style.display = 'block';
+    expCount.textContent = expiring.length + ' point' + (expiring.length===1?'':'s');
+    expBody.innerHTML = expiring.map(p => `
+      <div class="item">
+        <div style="flex:1;min-width:0;">
+          <div class="item-name">${esc(p.title)}</div>
+          ${p.person ? `<div class="item-sub">👤 ${esc(p.person)}</div>` : ''}
+          <div class="expires-soon">⏱ Archives in ${daysUntilArchive(p)}d</div>
+        </div>
+        <button class="btn-green" onclick="restorePP('${p.id}')" style="white-space:nowrap;font-size:11px;">↩ Extend</button>
+      </div>`).join('');
+  } else {
+    expCard.style.display = 'none';
+  }
 
   // Today prayer points:
-  // 1) ALL points with 1 day or less left (urgent — always show)
-  // 2) 3 random current points (seeded daily)
-  // 3) Up to 3 points from today's tier people (e.g. girlfriend day = Rachel's points)
+  // 1) Pinned — ALL points expiring in ≤1 day (urgent, always shown)
+  // 2) Tier — ALL points linked to today's tier people (always shown)
+  // 3) Random 4 — from remaining general + current points, date-seeded
   const allActive = prayerPoints.filter(p => !p.archived);
   const currentPPs = allActive.filter(p => p.type === 'current');
   const oneDayLeft = currentPPs.filter(p => daysUntilArchive(p) <= 1);
   const oneDayIds = new Set(oneDayLeft.map(p => p.id));
-  const dateSeed = parseInt(new Date().toISOString().split('T')[0].replace(/-/g,''), 10);
 
-  // 3 random from all current (not already shown)
-  const remaining = currentPPs.filter(p => !oneDayIds.has(p.id));
+  // Today's tier people points
+  const todayPeople = new Set(prayers.filter(p => p.tier === tier).map(p => p.name.trim().toLowerCase()));
+  const tierPoints = allActive.filter(p =>
+    !oneDayIds.has(p.id) &&
+    p.person &&
+    todayPeople.has(p.person.trim().toLowerCase())
+  );
+  const tierIds = new Set(tierPoints.map(p => p.id));
+
+  // Random 4 from ALL remaining active points (general + current)
+  const remaining = allActive.filter(p => !oneDayIds.has(p.id) && !tierIds.has(p.id));
   const shuffled = [...remaining].sort((a,b) => {
     const ha = (dateSeed + a.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
     const hb = (dateSeed + b.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
     return ha - hb;
   });
-  const random3 = shuffled.slice(0, 3);
-  const shownIds = new Set([...oneDayIds, ...random3.map(p=>p.id)]);
+  const random4 = shuffled.slice(0, 4);
 
-  // Up to 3 from today's tier people
-  const todayPeople = new Set(prayers.filter(p => p.tier === tier).map(p => p.name.trim().toLowerCase()));
-  const tierPoints = allActive
-    .filter(p => !shownIds.has(p.id) && p.person && todayPeople.has(p.person.trim().toLowerCase()))
-    .sort((a,b) => {
-      const ha = (dateSeed + a.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
-      const hb = (dateSeed + b.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
-      return ha - hb;
-    })
-    .slice(0, 3);
-
-  const todayPPs = [...oneDayLeft, ...random3, ...tierPoints];
+  const todayPPs = [...oneDayLeft, ...tierPoints, ...random4];
 
   const ppEl = document.getElementById('today-prayerpoints');
   if (!todayPPs.length) {
@@ -653,7 +736,7 @@ function renderToday() {
     ppEl.innerHTML = todayPPs.map((p, i) => {
       const isCurrent = p.type === 'current';
       const dl = isCurrent ? daysUntilArchive(p) : null;
-      const expiryTag = (oneDayLeft && oneDayIds && oneDayIds.has(p.id) && isCurrent)
+      const expiryTag = (oneDayIds.has(p.id) && isCurrent)
         ? '<span style="font-size:10px;background:#fce4ec;color:#c62828;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">⏱ ' + dl + 'd</span>'
         : '<span style="font-size:10px;background:#ede7f6;color:#4527a0;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">Today</span>';
       const personHtml = p.person ? '<div class="item-sub">👤 ' + esc(p.person) + '</div>' : '';
@@ -665,6 +748,14 @@ function renderToday() {
   const upcoming = deadlines.filter(d => { const days = Math.ceil((new Date(d.date)-now)/86400000); return days>=0&&days<=7; });
   const el = document.getElementById('today-deadlines');
   el.innerHTML = upcoming.length ? upcoming.map(d=>`<div class="item"><div><div class="item-name">${esc(d.name)}</div><div class="item-sub">${d.type} · ${d.date}</div></div>${urgBadge(d.date)}</div>`).join('') : '<div class="empty">Nothing due this week 🎉</div>';
+}
+
+function toggleExpiringCard() {
+  const body = document.getElementById('expiring-body');
+  const chev = document.getElementById('expiring-chev');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 // ── PRAYER PEOPLE ─────────────────────────────────────────────────────────────
@@ -830,7 +921,7 @@ function renderPersonCard(p) {
 
   const ppSection = `<div class="person-pp-section"><div class="person-pp-title"><span>🙏 Prayer points</span><button class="btn-add-pp" onclick="openModal('${esc(p.name)}')">+ Add</button></div>${linked.length||archived.length ? activePills+archivedSection : '<div style="font-size:12px;color:#bbb;padding:4px 0;">No prayer points yet</div>'}</div>`;
 
-  return `<div class="person-card"><div class="person-card-header"><div style="flex:1;min-width:0;"><div class="item-name">${esc(p.name)}</div>${p.focus?`<div class="item-sub">${esc(p.focus)}</div>`:''} ${p.notes?`<div class="item-note">${esc(p.notes)}</div>`:''} ${p.last_prayed?`<div class="item-sub">Last prayed: ${p.last_prayed}</div>`:''}</div><div class="row-btns"><button class="btn-green" onclick="prayedFor('${p.id}')">✓ Prayed</button><button class="btn-danger" onclick="delPrayer('${p.id}')">×</button></div></div>${ppSection}</div>`;
+  return `<div class="person-card"><div class="person-card-header"><div style="flex:1;min-width:0;"><div class="item-name">${esc(p.name)}</div>${p.focus?`<div class="item-sub">${esc(p.focus)}</div>`:''} ${p.notes?`<div class="item-note">${esc(p.notes)}</div>`:''} ${p.last_prayed?`<div class="${needsPrayer(p)?'expires-soon':'item-sub'}">${needsPrayer(p)?'⏰ ':''}Last prayed: ${p.last_prayed}</div>`:''}</div><div class="row-btns"><button class="btn-green" onclick="prayedFor('${p.id}')">✓ Prayed</button><button class="btn-danger" onclick="delPrayer('${p.id}')">×</button></div></div>${ppSection}</div>`;
 }
 
 // ── MODAL ─────────────────────────────────────────────────────────────────────
@@ -1154,52 +1245,146 @@ function renderDeadlines() {
 
 // ── STUDY ─────────────────────────────────────────────────────────────────────
 function getStudy() {
-  try { return JSON.parse(localStorage.getItem('ih-study-v2') || '{}'); } catch(e) { return {}; }
+  try { return JSON.parse(localStorage.getItem('ih-study-v3') || '{}'); } catch(e) { return {}; }
 }
 function saveStudy(s) {
-  try { localStorage.setItem('ih-study-v2', JSON.stringify(s)); } catch(e) {}
+  try { localStorage.setItem('ih-study-v3', JSON.stringify(s)); } catch(e) {}
 }
 function renderStudy() {
   const grid = document.getElementById('subject-grid');
   if (!grid) return;
+  SUBJECTS = getSubjects();
   const s = getStudy();
-  grid.innerHTML = '';
-  const wrapper = document.createElement('div');
-  wrapper.className = 'subject-grid';
-  SUBJECTS.forEach(subj => {
-    const card = document.createElement('div');
-    card.className = 'subject-card';
-    const title = document.createElement('div');
-    title.className = 'subject-title';
-    title.textContent = subj.name;
-    card.appendChild(title);
-    subj.tasks.forEach(task => {
-      const key = subj.id + '_' + task;
-      const row = document.createElement('div');
-      row.className = 'check-row';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.id = key;
-      cb.checked = s[key] === true;
-      cb.addEventListener('change', function() {
-        const cur = getStudy();
-        cur[key] = this.checked;
-        saveStudy(cur);
-      });
-      const lbl = document.createElement('label');
-      lbl.htmlFor = key;
-      lbl.textContent = task;
-      row.appendChild(cb);
-      row.appendChild(lbl);
-      card.appendChild(row);
-    });
-    wrapper.appendChild(card);
-  });
-  grid.appendChild(wrapper);
+  grid.innerHTML = SUBJECTS.map(subj => {
+    return `<div class="subject-card">
+      <div class="subject-title">${esc(subj.name)}</div>
+      ${subj.tasks.map(task => {
+        const key = subj.id + '_' + task;
+        const done = !!s[key];
+        return `<div class="check-row" onclick="toggleStudy('${key}')" style="cursor:pointer;">
+          <div id="chkbox-${key}" style="width:16px;height:16px;border:2px solid var(--navy);border-radius:4px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:${done?'var(--navy)':'white'};transition:all 0.15s;">
+            ${done?'<span style="color:white;font-size:11px;font-weight:800;line-height:1;">✓</span>':''}
+          </div>
+          <label style="font-size:13px;color:${done?'#bbb':'#555'};text-decoration:${done?'line-through':'none'};cursor:pointer;pointer-events:none;">${esc(task)}</label>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
+}
+function toggleStudy(key) {
+  const s = getStudy();
+  s[key] = !s[key];
+  saveStudy(s);
+  const box = document.getElementById('chkbox-' + key);
+  if (box) {
+    box.style.background = s[key] ? 'var(--navy)' : 'white';
+    box.innerHTML = s[key] ? '<span style="color:white;font-size:11px;font-weight:800;line-height:1;">✓</span>' : '';
+  }
+  const row = box && box.parentElement;
+  if (row) {
+    const lbl = row.querySelector('label');
+    if (lbl) { lbl.style.color = s[key] ? '#bbb' : '#555'; lbl.style.textDecoration = s[key] ? 'line-through' : 'none'; }
+  }
 }
 function resetStudy() {
+  if (!confirm('Clear all ticks for the new week?')) return;
   saveStudy({});
   renderStudy();
+}
+
+// ── EDIT SUBJECTS ─────────────────────────────────────────────────────────────
+function toggleEditSubjects() {
+  const card = document.getElementById('edit-subjects-card');
+  const open = card.style.display !== 'none';
+  card.style.display = open ? 'none' : 'block';
+  if (!open) renderEditSubjects();
+}
+function renderEditSubjects() {
+  SUBJECTS = getSubjects();
+  const el = document.getElementById('edit-subjects-list');
+  if (!el) return;
+  el.innerHTML = SUBJECTS.map((subj, si) => `
+    <div style="background:#fafaf8;border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <input type="text" value="${esc(subj.name)}" id="subj-name-${si}"
+          style="margin:0;flex:1;font-weight:600;font-size:13px;"
+          onblur="renameSubject(${si}, this.value)" />
+        <button class="btn-danger" onclick="deleteSubject(${si})" style="font-size:16px;">×</button>
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Tasks</div>
+      ${subj.tasks.map((task, ti) => `
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+          <input type="text" value="${esc(task)}" id="task-${si}-${ti}"
+            style="margin:0;flex:1;font-size:13px;"
+            onblur="renameTask(${si}, ${ti}, this.value)" />
+          <button class="btn-danger" onclick="deleteTask(${si}, ${ti})">×</button>
+        </div>`).join('')}
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <input type="text" id="new-task-${si}" placeholder="Add task..."
+          style="margin:0;flex:1;font-size:12px;"
+          onkeydown="if(event.key==='Enter')addTask(${si})" />
+        <button class="btn-xs" onclick="addTask(${si})">+ Task</button>
+      </div>
+    </div>`).join('');
+}
+function renameSubject(si, val) {
+  if (!val.trim()) return;
+  const subjects = getSubjects();
+  subjects[si].name = val.trim();
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  renderStudy();
+}
+function renameTask(si, ti, val) {
+  if (!val.trim()) return;
+  const subjects = getSubjects();
+  subjects[si].tasks[ti] = val.trim();
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  saveStudy({});
+  renderStudy();
+}
+function deleteTask(si, ti) {
+  const subjects = getSubjects();
+  subjects[si].tasks.splice(ti, 1);
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  saveStudy({});
+  renderStudy();
+  renderEditSubjects();
+}
+function addTask(si) {
+  const input = document.getElementById('new-task-' + si);
+  if (!input || !input.value.trim()) return;
+  const subjects = getSubjects();
+  subjects[si].tasks.push(input.value.trim());
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  input.value = '';
+  renderStudy();
+  renderEditSubjects();
+}
+function deleteSubject(si) {
+  if (!confirm('Delete this subject and all its tasks?')) return;
+  const subjects = getSubjects();
+  subjects.splice(si, 1);
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  saveStudy({});
+  renderStudy();
+  renderEditSubjects();
+}
+function addSubject() {
+  const input = document.getElementById('new-subject-name');
+  if (!input || !input.value.trim()) return;
+  const subjects = getSubjects();
+  const id = 'subj_' + Date.now();
+  subjects.push({ id, name: input.value.trim(), tasks: ['Lecture', 'Readings', 'Summary'] });
+  saveSubjects(subjects);
+  SUBJECTS = subjects;
+  input.value = '';
+  renderStudy();
+  renderEditSubjects();
 }
 
 // ── AI GENERATOR ──────────────────────────────────────────────────────────────
@@ -1605,7 +1790,139 @@ function toggleSVCat(cat) {
 }
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
+function needsPrayer(p) {
+  if (!p.last_prayed) return false;
+  return (Date.now() - new Date(p.last_prayed).getTime()) / 86400000 >= 30;
+}
+
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+
+// ── JOURNAL ───────────────────────────────────────────────────────────────────
+let jEntries = [];
+let isRecording = false, recognition = null, recInterval = null, recSecs = 0, liveText = '';
+
+async function loadJournal() {
+  try {
+    const { data, error } = await sb.from('journal_entries').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    jEntries = data || [];
+  } catch(e) {
+    jEntries = [];
+    console.warn('Journal table may not exist yet. Run: CREATE TABLE journal_entries (id uuid default gen_random_uuid() primary key, created_at timestamptz default now(), text text not null, date_label text);');
+  }
+}
+
+function renderJournal() {
+  const el = document.getElementById('journal-list');
+  if (!el) return;
+  if (!jEntries.length) { el.innerHTML = '<div class="empty">No entries yet — tap record to begin</div>'; return; }
+  el.innerHTML = jEntries.map(e => `
+    <div class="j-entry">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <div class="j-entry-date">${esc(e.date_label || new Date(e.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>
+        <div style="display:flex;gap:4px;">
+          <button class="btn-sm" id="jeb-${e.id}" onclick="editJEntry('${e.id}')" style="font-size:11px;padding:3px 7px;">✏️</button>
+          <button class="btn-danger" onclick="delJEntry('${e.id}')">×</button>
+        </div>
+      </div>
+      <div class="j-entry-text" id="jt-${e.id}">${esc(e.text)}</div>
+      <textarea class="j-edit-area" id="je-${e.id}">${esc(e.text)}</textarea>
+    </div>`).join('');
+}
+
+async function delJEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  setSyncing('syncing');
+  const { error } = await sb.from('journal_entries').delete().eq('id', id);
+  if (!error) { jEntries = jEntries.filter(e => e.id !== id); setSyncing('ok'); }
+  else setSyncing('error');
+  renderJournal();
+}
+
+function editJEntry(id) {
+  const t = document.getElementById('jt-' + id);
+  const a = document.getElementById('je-' + id);
+  const b = document.getElementById('jeb-' + id);
+  if (!t || !a || !b) return;
+  const ed = a.style.display !== 'none';
+  if (ed) {
+    const entry = jEntries.find(e => e.id === id);
+    if (entry) {
+      entry.text = a.value;
+      setSyncing('syncing');
+      sb.from('journal_entries').update({ text: a.value }).eq('id', id).then(({ error }) => setSyncing(error ? 'error' : 'ok'));
+    }
+    t.textContent = a.value; t.style.display = 'block'; a.style.display = 'none'; b.textContent = '✏️';
+  } else {
+    t.style.display = 'none'; a.style.display = 'block'; a.focus(); b.textContent = '💾';
+  }
+}
+
+function toggleRecording() { if (!isRecording) startRec(); else stopRec(); }
+
+function startRec() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('rec-status').textContent = 'Speech recognition not supported. Try Chrome or Safari iOS 17+.';
+    return;
+  }
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-AU';
+  recognition.onresult = e => {
+    let f = '', i = '';
+    for (let n = e.resultIndex; n < e.results.length; n++) {
+      if (e.results[n].isFinal) f += e.results[n][0].transcript;
+      else i += e.results[n][0].transcript;
+    }
+    if (f) liveText += f + ' ';
+    const lt = document.getElementById('live-transcript');
+    if (lt) lt.textContent = (liveText + i) || 'Listening...';
+  };
+  recognition.onerror = e => {
+    if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error;
+  };
+  liveText = ''; isRecording = true; recSecs = 0;
+  const btn = document.getElementById('rec-btn');
+  const wave = document.getElementById('rec-wave');
+  const lt = document.getElementById('live-transcript');
+  btn.textContent = '⏹ Stop Recording'; btn.style.background = '#b71c1c';
+  wave.style.display = 'flex';
+  if (lt) lt.style.display = 'block';
+  document.getElementById('rec-status').textContent = 'Recording...';
+  recognition.start();
+  recInterval = setInterval(() => {
+    recSecs++;
+    const m = Math.floor(recSecs / 60), s = recSecs % 60;
+    document.getElementById('rec-timer').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+  }, 1000);
+}
+
+async function stopRec() {
+  isRecording = false;
+  if (recognition) try { recognition.stop(); } catch(e) {}
+  clearInterval(recInterval);
+  const btn = document.getElementById('rec-btn');
+  const wave = document.getElementById('rec-wave');
+  btn.textContent = '🎙 Start Recording'; btn.style.background = '#e53935';
+  wave.style.display = 'none';
+  document.getElementById('rec-timer').textContent = '0:00';
+  const text = liveText.trim();
+  if (text) {
+    document.getElementById('rec-status').textContent = 'Saving...';
+    const dateLabel = new Date().toLocaleString('en-AU', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    setSyncing('syncing');
+    const { data, error } = await sb.from('journal_entries').insert([{ text, date_label: dateLabel }]).select();
+    if (!error && data) { jEntries.unshift(data[0]); setSyncing('ok'); renderJournal(); document.getElementById('rec-status').textContent = 'Saved ✓'; }
+    else { setSyncing('error'); document.getElementById('rec-status').textContent = 'Save failed — check connection'; }
+  } else {
+    document.getElementById('rec-status').textContent = 'Nothing recorded';
+  }
+  const lt = document.getElementById('live-transcript');
+  if (lt) { lt.textContent = ''; lt.style.display = 'none'; }
+  liveText = ''; recSecs = 0;
+}
 
 // ── START ─────────────────────────────────────────────────────────────────────
 init();
