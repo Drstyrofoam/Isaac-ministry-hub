@@ -332,8 +332,8 @@
     <div id="expiring-body" style="margin-top:10px;display:none;"></div>
   </div>
   <div class="card">
-    <h3>Current prayer points</h3>
-    <div id="today-prayerpoints"><div class="empty">No current prayer points</div></div>
+    <h3>Today's prayer points</h3>
+    <div id="today-prayerpoints"><div class="empty">No prayer points yet</div></div>
   </div>
   <div class="card">
     <h3>Due this week</h3>
@@ -666,21 +666,33 @@ function renderToday() {
   document.getElementById('date-display').textContent = now.toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
   const day = now.getDay();
 
-  // Random daily rotation — seeded by date so consistent all day but different each day
-  const dateSeed = parseInt(now.toISOString().split('T')[0].replace(/-/g,''), 10);
-  function seededR(n) { let s = (dateSeed + n * 7919) * 9301 + 49297; return (s % 233280) / 233280; }
-  const shuffledRotation = [...ROTATION].sort((a, b) => seededR(ROTATION.indexOf(a)) - seededR(ROTATION.indexOf(b)));
+  // Daily rotation — seeded by date, consistent all day, different each day
+  // Use a proper hash so each day gets a genuinely different first tier
+  const dateStr = now.toISOString().split('T')[0]; // e.g. "2026-06-10"
+  const dateSeed = dateStr.split('').reduce((acc, c) => Math.imul(31, acc) + c.charCodeAt(0) | 0, 0);
+  function seededR(i) {
+    let s = Math.abs(dateSeed ^ (i * 2654435761));
+    s = ((s >>> 16) ^ s) * 0x45d9f3b;
+    s = ((s >>> 16) ^ s);
+    return (s >>> 0) / 4294967296;
+  }
+  const shuffledRotation = [...ROTATION].map((t, i) => ({ t, r: seededR(i) })).sort((a, b) => a.r - b.r).map(x => x.t);
   const tier = shuffledRotation[0];
 
   document.getElementById('today-tier').textContent = '🙏 Praying for: ' + TIERS[tier];
   const people = prayers.filter(p => p.tier === tier);
   document.getElementById('today-people').textContent = people.length ? people.map(p=>p.name).join(', ') : 'No one added yet for this tier';
 
+  // Day row — each day of the week shows its own tier based on today's seed offset
   const grid = document.getElementById('day-row');
-  grid.innerHTML = DAYS.map((d,i) => `<div class="day-cell dc-${i}${i===day?' today':''}"><div class="day-name">${d}</div><div class="tier-short">${TIERS[shuffledRotation[i%shuffledRotation.length]].split(' ')[0]}</div></div>`).join('');
+  grid.innerHTML = DAYS.map((d,i) => {
+    const dayTier = shuffledRotation[i % shuffledRotation.length];
+    return `<div class="day-cell dc-${i}${i===day?' today':''}"><div class="day-name">${d}</div><div class="tier-short">${TIERS[dayTier].split(' ')[0]}</div></div>`;
+  }).join('');
 
-  // ── EXPIRING CARD (archiving in ≤1 day, collapsible) ──
-  const expiring = prayerPoints.filter(p => p.type === 'current' && !p.archived && daysUntilArchive(p) <= 1);
+  // Expiring card — points archiving in ≤1 day, collapsible
+  const currentPPs = prayerPoints.filter(p => p.type === 'current' && !p.archived);
+  const expiring = currentPPs.filter(p => daysUntilArchive(p) <= 1);
   const expCard = document.getElementById('expiring-card');
   const expBody = document.getElementById('expiring-body');
   const expCount = document.getElementById('expiring-count');
@@ -700,48 +712,38 @@ function renderToday() {
     expCard.style.display = 'none';
   }
 
-  // Today prayer points:
-  // 1) Pinned — ALL points expiring in ≤1 day (urgent, always shown)
-  // 2) Tier — ALL points linked to today's tier people (always shown)
-  // 3) Random 4 — from remaining general + current points, date-seeded
+  // Random daily prayer points — tier people always shown, then random fill from all active
   const allActive = prayerPoints.filter(p => !p.archived);
-  const currentPPs = allActive.filter(p => p.type === 'current');
-  const oneDayLeft = currentPPs.filter(p => daysUntilArchive(p) <= 1);
-  const oneDayIds = new Set(oneDayLeft.map(p => p.id));
-
-  // Today's tier people points
+  const expiringIds = new Set(expiring.map(p => p.id));
   const todayPeople = new Set(prayers.filter(p => p.tier === tier).map(p => p.name.trim().toLowerCase()));
   const tierPoints = allActive.filter(p =>
-    !oneDayIds.has(p.id) &&
+    !expiringIds.has(p.id) &&
     p.person &&
     todayPeople.has(p.person.trim().toLowerCase())
   );
   const tierIds = new Set(tierPoints.map(p => p.id));
-
-  // Random 4 from ALL remaining active points (general + current)
-  const remaining = allActive.filter(p => !oneDayIds.has(p.id) && !tierIds.has(p.id));
+  const remaining = allActive.filter(p => !expiringIds.has(p.id) && !tierIds.has(p.id));
   const shuffled = [...remaining].sort((a,b) => {
     const ha = (dateSeed + a.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
     const hb = (dateSeed + b.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
     return ha - hb;
   });
-  const random4 = shuffled.slice(0, 4);
-
-  const todayPPs = [...oneDayLeft, ...tierPoints, ...random4];
+  const randomFill = shuffled.slice(0, Math.max(0, 6 - tierPoints.length));
+  const todayPPs = [...tierPoints, ...randomFill];
 
   const ppEl = document.getElementById('today-prayerpoints');
   if (!todayPPs.length) {
-    ppEl.innerHTML = '<div class="empty">No prayer points today</div>';
+    ppEl.innerHTML = '<div class="empty">No prayer points yet — add some in the Points tab</div>';
   } else {
-    ppEl.innerHTML = todayPPs.map((p, i) => {
+    ppEl.innerHTML = todayPPs.map(p => {
       const isCurrent = p.type === 'current';
       const dl = isCurrent ? daysUntilArchive(p) : null;
-      const expiryTag = (oneDayIds.has(p.id) && isCurrent)
-        ? '<span style="font-size:10px;background:#fce4ec;color:#c62828;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">⏱ ' + dl + 'd</span>'
-        : '<span style="font-size:10px;background:#ede7f6;color:#4527a0;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">Today</span>';
-      const personHtml = p.person ? '<div class="item-sub">👤 ' + esc(p.person) + '</div>' : '';
-      const bodyHtml = p.body ? '<div class="item-note">' + esc(p.body) + '</div>' : '';
-      return '<div class="item"><div style="flex:1;min-width:0;"><div class="item-name">' + esc(p.title) + expiryTag + '</div>' + personHtml + bodyHtml + '</div></div>';
+      const typeTag = isCurrent
+        ? `<span style="font-size:10px;background:#fce4ec;color:#c62828;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">⏱ ${dl}d</span>`
+        : `<span style="font-size:10px;background:#e8f4fd;color:#0277bd;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">General</span>`;
+      const personHtml = p.person ? `<div class="item-sub">👤 ${esc(p.person)}</div>` : '';
+      const bodyHtml = p.body ? `<div class="item-note">${esc(p.body)}</div>` : '';
+      return `<div class="item"><div style="flex:1;min-width:0;"><div class="item-name">${esc(p.title)}${typeTag}</div>${personHtml}${bodyHtml}</div></div>`;
     }).join('');
   }
 
@@ -753,12 +755,11 @@ function renderToday() {
 function toggleExpiringCard() {
   const body = document.getElementById('expiring-body');
   const chev = document.getElementById('expiring-chev');
+  if (!body) return;
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
   if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
 }
-
-// ── PRAYER PEOPLE ─────────────────────────────────────────────────────────────
 async function addPrayer() {
   const name = document.getElementById('p-name').value.trim();
   const tier = document.getElementById('p-tier').value;
@@ -1060,12 +1061,14 @@ function renderPPItem(p, isArchive) {
 }
 
 function togglePPSec(sec) {
-  const body = document.getElementById('ppsecbody-' + sec);
-  const chev = document.getElementById('chev-ppsec-' + sec);
+  const safeKey = sec.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const body = document.getElementById('ppsecbody-' + safeKey);
+  const chev = document.getElementById('chev-ppsec-' + safeKey);
+  if (!body) return;
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   if (chev) chev.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
-  localStorage.setItem('ih-ppsec-open-' + sec, !isOpen);
+  localStorage.setItem('ih-ppsec-open-' + safeKey, !isOpen);
 }
 
 function addPPSection() {
@@ -1168,27 +1171,28 @@ function renderPrayerPoints() {
 
     el.innerHTML = orderedSections.map(sec => {
       const secItems = sectionMap[sec];
-      const openKey = 'ih-ppsec-open-' + sec;
-      const isOpen = localStorage.getItem(openKey) !== 'false';
       const currentCount = secItems.filter(p => p.type === 'current').length;
       const badge = currentCount ? `<span style="font-size:10px;background:var(--red-light);color:var(--red);padding:1px 7px;border-radius:99px;font-weight:600;margin-left:6px;">🔴 ${currentCount}</span>` : '';
+      const safeKey = sec.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const openKey = 'ih-ppsec-open-' + safeKey;
+      const isOpen = localStorage.getItem(openKey) !== 'false';
       return `<div class="tier-group" draggable="true" data-sec="${esc(sec)}"
-        ondragstart="dragSecStart(event,'${esc(sec)}')"
+        ondragstart="dragSecStart(event,${JSON.stringify(sec)})"
         ondragover="dragSecOver(event)"
-        ondrop="dragSecDrop(event,'${esc(sec)}')"
+        ondrop="dragSecDrop(event,${JSON.stringify(sec)})"
         ondragend="dragSecEnd()">
-        <div class="tier-header" onclick="togglePPSec('${esc(sec)}')">
+        <div class="tier-header" onclick="togglePPSec(${JSON.stringify(sec)})">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="drag-handle">⠿</span>
             <span class="tier-header-label">${esc(sec)}</span>
             <span class="tier-count">${secItems.length} point${secItems.length===1?'':'s'}${badge}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
-            <button class="btn-sm" style="font-size:10px;padding:3px 8px;" onclick="event.stopPropagation();renamePPSection('${esc(sec)}')">✏️</button>
-            <span class="tier-chevron" id="chev-ppsec-${esc(sec)}" style="transform:${isOpen?'rotate(0)':'rotate(-90deg)'}">▼</span>
+            <button class="btn-sm" style="font-size:10px;padding:3px 8px;" onclick="event.stopPropagation();renamePPSection(${JSON.stringify(sec)})">✏️</button>
+            <span class="tier-chevron" id="chev-ppsec-${safeKey}" style="transform:${isOpen?'rotate(0)':'rotate(-90deg)'}">▼</span>
           </div>
         </div>
-        <div id="ppsecbody-${esc(sec)}" style="display:${isOpen?'block':'none'}">
+        <div id="ppsecbody-${safeKey}" style="display:${isOpen?'block':'none'}">
           ${secItems.map(p => renderPPItem(p, isArchive)).join('')}
         </div>
       </div>`;
