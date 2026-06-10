@@ -492,8 +492,10 @@
 <!-- JOURNAL -->
 <div id="journal" class="section">
   <div class="info-banner">
-    🎙 Tap Record to capture a thought. Speech recognition transcribes in real-time. Works in Chrome and Safari iOS 17+. Entries saved to your database.
+    🎙 Tap Record to capture a thought. Name it, assign a bubble, tag themes. Copy to clipboard anytime.
   </div>
+
+  <!-- Record card -->
   <div class="card">
     <div id="rec-timer" style="font-size:28px;font-weight:700;color:var(--navy);text-align:center;padding:6px 0;">0:00</div>
     <div id="rec-wave" style="display:none;justify-content:center;gap:3px;height:36px;align-items:center;margin:4px 0;">
@@ -507,9 +509,54 @@
     <button id="rec-btn" onclick="toggleRecording()" style="background:#e53935;color:white;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px;">🎙 Start Recording</button>
     <div id="live-transcript" style="background:#f0f4f8;border-radius:8px;padding:10px;font-size:13px;color:#555;min-height:40px;display:none;line-height:1.5;"></div>
   </div>
+
+  <!-- Bubbles -->
   <div class="card">
-    <h3>Saved entries</h3>
-    <div id="journal-list"><div class="empty">No entries yet — tap record to begin</div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h3 style="margin:0;">Bubbles</h3>
+      <button class="btn-sm" onclick="toggleNewBubble()">+ New bubble</button>
+    </div>
+    <div id="new-bubble-row" style="display:none;margin-bottom:10px;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <input type="text" id="bubble-name" placeholder="Bubble name (e.g. Pride series, Fiji, Rachel thread)" style="margin:0;flex:1;min-width:160px;" />
+        <input type="color" id="bubble-colour" value="#2E4057" style="margin:0;width:36px;height:36px;padding:2px;border-radius:6px;cursor:pointer;flex-shrink:0;" />
+        <button class="btn btn-primary" onclick="addBubble()" style="white-space:nowrap;">Add</button>
+      </div>
+    </div>
+    <div id="bubble-list" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- Filter bar -->
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center;">
+    <span style="font-size:12px;color:var(--muted);font-weight:600;">View:</span>
+    <button class="prayer-subtab active" id="jf-all" onclick="setJournalFilter('all')">All</button>
+    <div id="bubble-filter-tabs" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+  </div>
+
+  <!-- Entries -->
+  <div id="journal-list"><div class="empty">No entries yet — tap record to begin</div></div>
+</div>
+
+<!-- JOURNAL EDIT MODAL -->
+<div class="modal-overlay" id="journal-modal" onclick="closeJournalModal(event)">
+  <div class="modal" style="max-height:85vh;overflow-y:auto;">
+    <h3 id="jmodal-title">Edit entry</h3>
+    <div class="edit-form">
+      <label>Title</label>
+      <input type="text" id="jm-title" placeholder="Name this entry..." />
+      <label>Text</label>
+      <textarea id="jm-text" style="min-height:100px;"></textarea>
+      <label>Bubble (primary)</label>
+      <select id="jm-bubble">
+        <option value="">— No bubble —</option>
+      </select>
+      <label>Tags (themes — comma separated)</label>
+      <input type="text" id="jm-tags" placeholder="e.g. Pride, Fiji, Ministry vision" />
+    </div>
+    <div class="modal-btns" style="margin-top:12px;">
+      <button class="btn btn-primary" style="flex:2;" onclick="saveJournalModal()">Save</button>
+      <button class="btn btn-cancel" onclick="closeJournalModalDirect()">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -713,6 +760,7 @@ function renderToday() {
   }
 
   // Random daily prayer points — tier people always shown, then random fill from all active
+  // Shows up to 6 total, all labelled "Today" regardless of type
   const allActive = prayerPoints.filter(p => !p.archived);
   const expiringIds = new Set(expiring.map(p => p.id));
   const todayPeople = new Set(prayers.filter(p => p.tier === tier).map(p => p.name.trim().toLowerCase()));
@@ -736,20 +784,36 @@ function renderToday() {
     ppEl.innerHTML = '<div class="empty">No prayer points yet — add some in the Points tab</div>';
   } else {
     ppEl.innerHTML = todayPPs.map(p => {
-      const isCurrent = p.type === 'current';
-      const dl = isCurrent ? daysUntilArchive(p) : null;
-      const typeTag = isCurrent
-        ? `<span style="font-size:10px;background:#fce4ec;color:#c62828;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">⏱ ${dl}d</span>`
-        : `<span style="font-size:10px;background:#e8f4fd;color:#0277bd;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">General</span>`;
-      const personHtml = p.person ? `<div class="item-sub">👤 ${esc(p.person)}</div>` : '';
-      const bodyHtml = p.body ? `<div class="item-note">${esc(p.body)}</div>` : '';
-      return `<div class="item"><div style="flex:1;min-width:0;"><div class="item-name">${esc(p.title)}${typeTag}</div>${personHtml}${bodyHtml}</div></div>`;
+      const hasDetail = p.body || p.person;
+      const safeId = 'tpp-' + p.id.replace(/-/g,'');
+      const personHtml = p.person ? `<div class="item-sub" style="margin-top:5px;">👤 ${esc(p.person)}</div>` : '';
+      const bodyHtml = p.body ? `<div class="item-note" style="margin-top:4px;">${esc(p.body)}</div>` : '';
+      const detailHtml = hasDetail ? `<div id="${safeId}" style="display:none;">${personHtml}${bodyHtml}</div>` : '';
+      const chevron = hasDetail ? `<span id="${safeId}-chev" style="font-size:10px;color:var(--muted);margin-left:4px;transition:transform 0.2s;display:inline-block;">▼</span>` : '';
+      const clickHandler = hasDetail ? `onclick="toggleTodayPP('${safeId}')" style="cursor:pointer;"` : '';
+      return `<div class="item" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;align-items:center;justify-content:space-between;" ${clickHandler}>
+          <div style="flex:1;min-width:0;">
+            <div class="item-name">${esc(p.title)}<span style="font-size:10px;background:#ede7f6;color:#4527a0;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:600;">Today</span>${chevron}</div>
+          </div>
+        </div>
+        ${detailHtml}
+      </div>`;
     }).join('');
   }
 
   const upcoming = deadlines.filter(d => { const days = Math.ceil((new Date(d.date)-now)/86400000); return days>=0&&days<=7; });
   const el = document.getElementById('today-deadlines');
   el.innerHTML = upcoming.length ? upcoming.map(d=>`<div class="item"><div><div class="item-name">${esc(d.name)}</div><div class="item-sub">${d.type} · ${d.date}</div></div>${urgBadge(d.date)}</div>`).join('') : '<div class="empty">Nothing due this week 🎉</div>';
+}
+
+function toggleTodayPP(safeId) {
+  const detail = document.getElementById(safeId);
+  const chev = document.getElementById(safeId + '-chev');
+  if (!detail) return;
+  const open = detail.style.display !== 'none';
+  detail.style.display = open ? 'none' : 'block';
+  if (chev) chev.style.transform = open ? '' : 'rotate(180deg)';
 }
 
 function toggleExpiringCard() {
@@ -1803,35 +1867,182 @@ function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 
 // ── JOURNAL ───────────────────────────────────────────────────────────────────
 let jEntries = [];
+let jBubbles = [];
+let jFilter = 'all';
+let jEditId = null;
 let isRecording = false, recognition = null, recInterval = null, recSecs = 0, liveText = '';
 
 async function loadJournal() {
   try {
-    const { data, error } = await sb.from('journal_entries').select('*').order('created_at', { ascending: false });
-    if (error) throw error;
-    jEntries = data || [];
+    const [entriesRes, bubblesRes] = await Promise.allSettled([
+      sb.from('journal_entries').select('*').order('created_at', { ascending: false }),
+      sb.from('journal_bubbles').select('*').order('created_at', { ascending: true }),
+    ]);
+    jEntries = entriesRes.status === 'fulfilled' ? (entriesRes.value.data || []) : [];
+    jBubbles = bubblesRes.status === 'fulfilled' ? (bubblesRes.value.data || []) : [];
   } catch(e) {
-    jEntries = [];
-    console.warn('Journal table may not exist yet. Run: CREATE TABLE journal_entries (id uuid default gen_random_uuid() primary key, created_at timestamptz default now(), text text not null, date_label text);');
+    jEntries = []; jBubbles = [];
+  }
+}
+
+function setJournalFilter(f) {
+  jFilter = f;
+  document.querySelectorAll('#jf-all, .jf-bubble-tab').forEach(b => b.classList.remove('active'));
+  if (f === 'all') document.getElementById('jf-all').classList.add('active');
+  else document.getElementById('jf-bubble-' + f)?.classList.add('active');
+  renderJournal();
+}
+
+function renderBubbles() {
+  // Bubble list in management card
+  const bl = document.getElementById('bubble-list');
+  if (bl) {
+    bl.innerHTML = jBubbles.length
+      ? jBubbles.map(b => `
+        <div style="display:inline-flex;align-items:center;gap:5px;background:${b.colour}18;border:1.5px solid ${b.colour};border-radius:99px;padding:4px 11px;font-size:12px;font-weight:600;color:${b.colour};">
+          <span>${esc(b.name)}</span>
+          <button onclick="deleteBubble('${b.id}')" style="background:none;border:none;color:${b.colour};cursor:pointer;font-size:13px;padding:0 0 0 2px;opacity:0.7;line-height:1;">×</button>
+        </div>`).join('')
+      : '<div style="font-size:12px;color:var(--muted);">No bubbles yet — create one above</div>';
+  }
+  // Filter tabs
+  const ft = document.getElementById('bubble-filter-tabs');
+  if (ft) {
+    ft.innerHTML = jBubbles.map(b => `
+      <button class="prayer-subtab jf-bubble-tab${jFilter===b.id?' active':''}" id="jf-bubble-${b.id}"
+        onclick="setJournalFilter('${b.id}')"
+        style="${jFilter===b.id?`background:${b.colour};border-color:${b.colour};`:''}">
+        ${esc(b.name)}
+      </button>`).join('');
+  }
+  // Bubble select in modal
+  const sel = document.getElementById('jm-bubble');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— No bubble —</option>' +
+      jBubbles.map(b => `<option value="${b.id}"${cur===b.id?' selected':''}>${esc(b.name)}</option>`).join('');
   }
 }
 
 function renderJournal() {
   const el = document.getElementById('journal-list');
   if (!el) return;
-  if (!jEntries.length) { el.innerHTML = '<div class="empty">No entries yet — tap record to begin</div>'; return; }
-  el.innerHTML = jEntries.map(e => `
-    <div class="j-entry">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
-        <div class="j-entry-date">${esc(e.date_label || new Date(e.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}))}</div>
-        <div style="display:flex;gap:4px;">
-          <button class="btn-sm" id="jeb-${e.id}" onclick="editJEntry('${e.id}')" style="font-size:11px;padding:3px 7px;">✏️</button>
+  renderBubbles();
+  let items = jFilter === 'all' ? jEntries : jEntries.filter(e => e.bubble_id === jFilter);
+  if (!items.length) { el.innerHTML = '<div class="empty">No entries' + (jFilter!=='all'?' in this bubble':' yet') + '</div>'; return; }
+  el.innerHTML = items.map(e => {
+    const bubble = jBubbles.find(b => b.id === e.bubble_id);
+    const tags = Array.isArray(e.tags) ? e.tags : [];
+    const dateStr = e.date_label || new Date(e.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<div class="j-entry" style="${bubble?`border-left:3px solid ${bubble.colour};`:''}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:6px;">
+        <div style="flex:1;min-width:0;">
+          ${e.title ? `<div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:2px;">${esc(e.title)}</div>` : ''}
+          <div class="j-entry-date">${dateStr}</div>
+          ${bubble ? `<div style="display:inline-block;font-size:10px;font-weight:700;padding:1px 8px;border-radius:99px;background:${bubble.colour}18;color:${bubble.colour};margin-top:3px;">${esc(bubble.name)}</div>` : ''}
+          ${tags.length ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${tags.map(t=>`<span style="font-size:10px;background:#f0ede8;color:#666;padding:1px 7px;border-radius:99px;">${esc(t.trim())}</span>`).join('')}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button class="btn-sm" onclick="copyJEntry('${e.id}')" style="font-size:11px;padding:3px 7px;" title="Copy to clipboard">📋</button>
+          <button class="btn-sm" onclick="openJournalModal('${e.id}')" style="font-size:11px;padding:3px 7px;">✏️</button>
           <button class="btn-danger" onclick="delJEntry('${e.id}')">×</button>
         </div>
       </div>
       <div class="j-entry-text" id="jt-${e.id}">${esc(e.text)}</div>
-      <textarea class="j-edit-area" id="je-${e.id}">${esc(e.text)}</textarea>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+async function addBubble() {
+  const name = document.getElementById('bubble-name').value.trim();
+  const colour = document.getElementById('bubble-colour').value;
+  if (!name) return;
+  setSyncing('syncing');
+  const { data, error } = await sb.from('journal_bubbles').insert([{ name, colour }]).select();
+  if (!error && data) { jBubbles.push(data[0]); setSyncing('ok'); }
+  else setSyncing('error');
+  document.getElementById('bubble-name').value = '';
+  document.getElementById('new-bubble-row').style.display = 'none';
+  renderJournal();
+}
+
+async function deleteBubble(id) {
+  if (!confirm('Delete this bubble? Entries won\'t be deleted, just unassigned.')) return;
+  setSyncing('syncing');
+  await sb.from('journal_entries').update({ bubble_id: null }).eq('bubble_id', id);
+  const { error } = await sb.from('journal_bubbles').delete().eq('id', id);
+  if (!error) { jBubbles = jBubbles.filter(b => b.id !== id); jEntries = jEntries.map(e => e.bubble_id===id?{...e,bubble_id:null}:e); setSyncing('ok'); }
+  else setSyncing('error');
+  if (jFilter === id) jFilter = 'all';
+  renderJournal();
+}
+
+function toggleNewBubble() {
+  const row = document.getElementById('new-bubble-row');
+  row.style.display = row.style.display === 'none' ? 'block' : 'none';
+  if (row.style.display === 'block') document.getElementById('bubble-name').focus();
+}
+
+function copyJEntry(id) {
+  const e = jEntries.find(e => e.id === id);
+  if (!e) return;
+  const parts = [];
+  if (e.title) parts.push(e.title);
+  parts.push(e.date_label || new Date(e.created_at).toLocaleString('en-AU'));
+  const bubble = jBubbles.find(b => b.id === e.bubble_id);
+  if (bubble) parts.push('Bubble: ' + bubble.name);
+  const tags = Array.isArray(e.tags) ? e.tags.filter(Boolean) : [];
+  if (tags.length) parts.push('Tags: ' + tags.join(', '));
+  parts.push('');
+  parts.push(e.text);
+  const txt = parts.join('\n');
+  navigator.clipboard.writeText(txt).then(() => {
+    const btn = event.target;
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }).catch(() => {
+    // Fallback for older iOS
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
+function openJournalModal(id) {
+  const e = jEntries.find(e => e.id === id);
+  if (!e) return;
+  jEditId = id;
+  document.getElementById('jmodal-title').textContent = 'Edit entry';
+  document.getElementById('jm-title').value = e.title || '';
+  document.getElementById('jm-text').value = e.text || '';
+  renderBubbles(); // populate select
+  document.getElementById('jm-bubble').value = e.bubble_id || '';
+  const tags = Array.isArray(e.tags) ? e.tags.filter(Boolean) : [];
+  document.getElementById('jm-tags').value = tags.join(', ');
+  document.getElementById('journal-modal').classList.add('open');
+}
+
+function closeJournalModal(e) { if (e.target === document.getElementById('journal-modal')) closeJournalModalDirect(); }
+function closeJournalModalDirect() { document.getElementById('journal-modal').classList.remove('open'); jEditId = null; }
+
+async function saveJournalModal() {
+  if (!jEditId) return;
+  const title = document.getElementById('jm-title').value.trim();
+  const text = document.getElementById('jm-text').value.trim();
+  const bubble_id = document.getElementById('jm-bubble').value || null;
+  const tagsRaw = document.getElementById('jm-tags').value;
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  if (!text) return;
+  setSyncing('syncing');
+  const { error } = await sb.from('journal_entries').update({ title, text, bubble_id, tags }).eq('id', jEditId);
+  if (!error) {
+    jEntries = jEntries.map(e => e.id===jEditId ? {...e, title, text, bubble_id, tags} : e);
+    setSyncing('ok');
+  } else setSyncing('error');
+  closeJournalModalDirect();
+  renderJournal();
 }
 
 async function delJEntry(id) {
@@ -1843,37 +2054,13 @@ async function delJEntry(id) {
   renderJournal();
 }
 
-function editJEntry(id) {
-  const t = document.getElementById('jt-' + id);
-  const a = document.getElementById('je-' + id);
-  const b = document.getElementById('jeb-' + id);
-  if (!t || !a || !b) return;
-  const ed = a.style.display !== 'none';
-  if (ed) {
-    const entry = jEntries.find(e => e.id === id);
-    if (entry) {
-      entry.text = a.value;
-      setSyncing('syncing');
-      sb.from('journal_entries').update({ text: a.value }).eq('id', id).then(({ error }) => setSyncing(error ? 'error' : 'ok'));
-    }
-    t.textContent = a.value; t.style.display = 'block'; a.style.display = 'none'; b.textContent = '✏️';
-  } else {
-    t.style.display = 'none'; a.style.display = 'block'; a.focus(); b.textContent = '💾';
-  }
-}
-
 function toggleRecording() { if (!isRecording) startRec(); else stopRec(); }
 
 function startRec() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    document.getElementById('rec-status').textContent = 'Speech recognition not supported. Try Chrome or Safari iOS 17+.';
-    return;
-  }
+  if (!SR) { document.getElementById('rec-status').textContent = 'Speech recognition not supported. Try Chrome or Safari iOS 17+.'; return; }
   recognition = new SR();
-  recognition.continuous = true;
-  recognition.interimResults = true;
-  recognition.lang = 'en-AU';
+  recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-AU';
   recognition.onresult = e => {
     let f = '', i = '';
     for (let n = e.resultIndex; n < e.results.length; n++) {
@@ -1884,45 +2071,35 @@ function startRec() {
     const lt = document.getElementById('live-transcript');
     if (lt) lt.textContent = (liveText + i) || 'Listening...';
   };
-  recognition.onerror = e => {
-    if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error;
-  };
+  recognition.onerror = e => { if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error; };
   liveText = ''; isRecording = true; recSecs = 0;
-  const btn = document.getElementById('rec-btn');
-  const wave = document.getElementById('rec-wave');
-  const lt = document.getElementById('live-transcript');
+  const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave'), lt = document.getElementById('live-transcript');
   btn.textContent = '⏹ Stop Recording'; btn.style.background = '#b71c1c';
-  wave.style.display = 'flex';
-  if (lt) lt.style.display = 'block';
+  wave.style.display = 'flex'; if (lt) lt.style.display = 'block';
   document.getElementById('rec-status').textContent = 'Recording...';
   recognition.start();
-  recInterval = setInterval(() => {
-    recSecs++;
-    const m = Math.floor(recSecs / 60), s = recSecs % 60;
-    document.getElementById('rec-timer').textContent = m + ':' + (s < 10 ? '0' : '') + s;
-  }, 1000);
+  recInterval = setInterval(() => { recSecs++; const m=Math.floor(recSecs/60),s=recSecs%60; document.getElementById('rec-timer').textContent=m+':'+(s<10?'0':'')+s; }, 1000);
 }
 
 async function stopRec() {
   isRecording = false;
   if (recognition) try { recognition.stop(); } catch(e) {}
   clearInterval(recInterval);
-  const btn = document.getElementById('rec-btn');
-  const wave = document.getElementById('rec-wave');
+  const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave');
   btn.textContent = '🎙 Start Recording'; btn.style.background = '#e53935';
   wave.style.display = 'none';
   document.getElementById('rec-timer').textContent = '0:00';
   const text = liveText.trim();
   if (text) {
     document.getElementById('rec-status').textContent = 'Saving...';
-    const dateLabel = new Date().toLocaleString('en-AU', {day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    const dateLabel = new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     setSyncing('syncing');
-    const { data, error } = await sb.from('journal_entries').insert([{ text, date_label: dateLabel }]).select();
-    if (!error && data) { jEntries.unshift(data[0]); setSyncing('ok'); renderJournal(); document.getElementById('rec-status').textContent = 'Saved ✓'; }
-    else { setSyncing('error'); document.getElementById('rec-status').textContent = 'Save failed — check connection'; }
-  } else {
-    document.getElementById('rec-status').textContent = 'Nothing recorded';
-  }
+    const { data, error } = await sb.from('journal_entries').insert([{ text, date_label: dateLabel, title: '', bubble_id: null, tags: [] }]).select();
+    if (!error && data) {
+      jEntries.unshift(data[0]); setSyncing('ok'); renderJournal();
+      document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name and tag it';
+    } else { setSyncing('error'); document.getElementById('rec-status').textContent = 'Save failed — check connection'; }
+  } else { document.getElementById('rec-status').textContent = 'Nothing recorded'; }
   const lt = document.getElementById('live-transcript');
   if (lt) { lt.textContent = ''; lt.style.display = 'none'; }
   liveText = ''; recSecs = 0;
