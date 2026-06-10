@@ -2094,12 +2094,37 @@ async function stopRec() {
     document.getElementById('rec-status').textContent = 'Saving...';
     const dateLabel = new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     setSyncing('syncing');
-    const { data, error } = await sb.from('journal_entries').insert([{ text, date_label: dateLabel, title: '', bubble_id: null, tags: [] }]).select();
-    if (!error && data) {
-      jEntries.unshift(data[0]); setSyncing('ok'); renderJournal();
+    let saved = false;
+
+    // Attempt 1: full schema (title, bubble_id, tags)
+    const r1 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel, title: '', bubble_id: null, tags: [] }]).select();
+    if (!r1.error && r1.data) {
+      jEntries.unshift(r1.data[0]); saved = true;
+    } else {
+      // Attempt 2: minimal schema fallback (text + date_label only)
+      const r2 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel }]).select();
+      if (!r2.error && r2.data) {
+        jEntries.unshift(r2.data[0]); saved = true;
+      } else {
+        console.error('Journal save error (full):', r1.error);
+        console.error('Journal save error (fallback):', r2.error);
+      }
+    }
+
+    if (saved) {
+      setSyncing('ok'); renderJournal();
       document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name and tag it';
-    } else { setSyncing('error'); document.getElementById('rec-status').textContent = 'Save failed — check connection'; }
-  } else { document.getElementById('rec-status').textContent = 'Nothing recorded'; }
+    } else {
+      setSyncing('error');
+      const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,80) : 'no error';
+      const e2msg = r2.error ? (r2.error.message || r2.error.code || JSON.stringify(r2.error)).slice(0,80) : 'no error';
+      document.getElementById('rec-status').textContent = '❌ ' + e1msg;
+      console.error('Full r1 error:', r1.error);
+      console.error('Full r2 error:', r2.error);
+    }
+  } else {
+    document.getElementById('rec-status').textContent = 'Nothing recorded';
+  }
   const lt = document.getElementById('live-transcript');
   if (lt) { lt.textContent = ''; lt.style.display = 'none'; }
   liveText = ''; recSecs = 0;
