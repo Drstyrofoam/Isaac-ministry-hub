@@ -724,13 +724,14 @@ function renderToday() {
     return (s >>> 0) / 4294967296;
   }
   const shuffledRotation = [...ROTATION].map((t, i) => ({ t, r: seededR(i) })).sort((a, b) => a.r - b.r).map(x => x.t);
-  const tier = shuffledRotation[0];
+  // Use today's day-of-week index to pick today's tier from the shuffled rotation
+  const tier = shuffledRotation[day % shuffledRotation.length];
 
   document.getElementById('today-tier').textContent = '🙏 Praying for: ' + TIERS[tier];
   const people = prayers.filter(p => p.tier === tier);
   document.getElementById('today-people').textContent = people.length ? people.map(p=>p.name).join(', ') : 'No one added yet for this tier';
 
-  // Day row — each day of the week shows its own tier based on today's seed offset
+  // Day row — each day maps to its own index in the shuffled rotation
   const grid = document.getElementById('day-row');
   grid.innerHTML = DAYS.map((d,i) => {
     const dayTier = shuffledRotation[i % shuffledRotation.length];
@@ -771,10 +772,12 @@ function renderToday() {
   );
   const tierIds = new Set(tierPoints.map(p => p.id));
   const remaining = allActive.filter(p => !expiringIds.has(p.id) && !tierIds.has(p.id));
+  // Strong per-point daily hash — XORs date seed with both point id chars and position
+  // so every day produces a completely different ordering
   const shuffled = [...remaining].sort((a,b) => {
-    const ha = (dateSeed + a.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
-    const hb = (dateSeed + b.id.replace(/-/g,'').split('').reduce((s,c)=>s+c.charCodeAt(0),0)) % 9973;
-    return ha - hb;
+    const idHashA = a.id.split('').reduce((s,c,i) => Math.imul(s ^ c.charCodeAt(0), 0x9e3779b9 + i) | 0, dateSeed);
+    const idHashB = b.id.split('').reduce((s,c,i) => Math.imul(s ^ c.charCodeAt(0), 0x9e3779b9 + i) | 0, dateSeed);
+    return (idHashA >>> 0) - (idHashB >>> 0);
   });
   const randomFill = shuffled.slice(0, Math.max(0, 6 - tierPoints.length));
   const todayPPs = [...tierPoints, ...randomFill];
