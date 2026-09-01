@@ -594,11 +594,11 @@ async function saveList(){
   } else {
     const id=uid();
     const l={id,name,description:desc,tiers:defaultTiers(),items:[]};
-    lists.push(l);activeId=id;
     setSync('syncing');
-    const{error}=await sb.from('tierlists').insert({id,name,description:desc,tiers:l.tiers,items:[]});
-    if(error){console.error('saveList error:',error);setSync('error');}
-    else{setSync('ok');}
+    const{data,error}=await sb.from('tierlists').insert({id,name,description:desc,tiers:l.tiers,items:[]}).select();
+    alert('insert result: error=' + JSON.stringify(error) + ' data=' + JSON.stringify(data));
+    if(error){setSync('error');return;}
+    lists.push(l);activeId=id;setSync('ok');
   }
   closeListModal();
   await loadLists();
