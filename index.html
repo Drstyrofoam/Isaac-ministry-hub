@@ -2136,11 +2136,10 @@ async function stopRec() {
       document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name and tag it';
     } else {
       setSyncing('error');
-      const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,80) : 'no error';
-      const e2msg = r2.error ? (r2.error.message || r2.error.code || JSON.stringify(r2.error)).slice(0,80) : 'no error';
-      document.getElementById('rec-status').textContent = '❌ ' + e1msg;
-      console.error('Full r1 error:', r1.error);
-      console.error('Full r2 error:', r2.error);
+      const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,120) : 'no error obj';
+      const e2msg = r2.error ? (r2.error.message || r2.error.code || JSON.stringify(r2.error)).slice(0,120) : 'no error obj';
+      document.getElementById('rec-status').textContent = '❌ ' + e1msg + ' | ' + e2msg;
+      console.error('r1:', r1); console.error('r2:', r2);
     }
   } else {
     document.getElementById('rec-status').textContent = 'Nothing recorded';
