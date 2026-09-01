@@ -393,14 +393,14 @@ async function loadLists(){
   setSync('syncing');
   const{data,error}=await sb.from('tierlists').select('*').order('created_at');
   if(error){setSync('error');loadLocal();return;}
-  lists=(data||[]).map(r=>({id:r.id,name:r.name,desc:r.desc||'',tiers:r.tiers||defaultTiers(),items:r.items||[]}));
+  lists=(data||[]).map(r=>({id:r.id,name:r.name,description:r.description||'',tiers:r.tiers||defaultTiers(),items:r.items||[]}));
   setSync('ok');
   if(lists.length&&!activeId)activeId=lists[0].id;
   render();
 }
 function loadLocal(){try{const s=JSON.parse(localStorage.getItem('tl-v2')||'null');if(s){lists=s.lists||[];activeId=s.active||null;}}catch(e){}render();}
 function saveLocal(){try{localStorage.setItem('tl-v2',JSON.stringify({lists,active:activeId}));}catch(e){}}
-async function persistList(list){setSync('syncing');saveLocal();const{error}=await sb.from('tierlists').upsert({id:list.id,name:list.name,desc:list.desc,tiers:list.tiers,items:list.items});setSync(error?'error':'ok');}
+async function persistList(list){setSync('syncing');saveLocal();const{error}=await sb.from('tierlists').upsert({id:list.id,name:list.name,description:list.description,tiers:list.tiers,items:list.items});setSync(error?'error':'ok');}
 
 function render(){
   renderBar();
@@ -584,8 +584,8 @@ function openMoveMenu(e,listId,itemId,curTierId){
 function closeMenu(){document.getElementById('move-menu').style.display='none';}
 
 function openNewList(){editListId=null;document.getElementById('lm-title').textContent='NEW LIST';document.getElementById('lm-name').value='';document.getElementById('lm-desc').value='';document.getElementById('lm-del').style.display='none';document.getElementById('list-modal').classList.add('open');setTimeout(()=>document.getElementById('lm-name').focus(),100);}
-function openEditList(id){const l=getList(id);editListId=id;document.getElementById('lm-title').textContent='EDIT LIST';document.getElementById('lm-name').value=l.name;document.getElementById('lm-desc').value=l.desc||'';document.getElementById('lm-del').style.display='block';document.getElementById('list-modal').classList.add('open');}
-async function saveList(){const name=document.getElementById('lm-name').value.trim();if(!name)return;const desc=document.getElementById('lm-desc').value.trim();if(editListId){const l=getList(editListId);l.name=name;l.desc=desc;await persistList(l);}else{const id=uid();const l={id,name,desc,tiers:defaultTiers(),items:[]};lists.push(l);activeId=id;setSync('syncing');await sb.from('tierlists').insert({id,name,desc,tiers:l.tiers,items:[]});setSync('ok');}closeListModal();render();}
+function openEditList(id){const l=getList(id);editListId=id;document.getElementById('lm-title').textContent='EDIT LIST';document.getElementById('lm-name').value=l.name;document.getElementById('lm-desc').value=l.description||'';document.getElementById('lm-del').style.display='block';document.getElementById('list-modal').classList.add('open');}
+async function saveList(){const name=document.getElementById('lm-name').value.trim();if(!name)return;const desc=document.getElementById('lm-desc').value.trim();if(editListId){const l=getList(editListId);l.name=name;l.description=desc;await persistList(l);}else{const id=uid();const l={id,name,description:desc,tiers:defaultTiers(),items:[]};lists.push(l);activeId=id;setSync('syncing');await sb.from('tierlists').insert({id,name,description:desc,tiers:l.tiers,items:[]});setSync('ok');}closeListModal();render();}
 async function deleteList(){if(!editListId||!confirm('Delete this list and all its items?'))return;setSync('syncing');await sb.from('tierlists').delete().eq('id',editListId);lists=lists.filter(l=>l.id!==editListId);if(activeId===editListId)activeId=lists[0]?.id||null;setSync('ok');saveLocal();closeListModal();render();}
 function renameList(id,val){const l=getList(id);if(!l||!val.trim())return;l.name=val.trim();persistList(l);renderBar();}
 function redescList(id,val){const l=getList(id);if(!l)return;l.desc=val.trim();persistList(l);}
