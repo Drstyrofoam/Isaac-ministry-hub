@@ -121,6 +121,7 @@ select option{background:var(--card);}
     <div class="logo-sub">Priority tracker</div>
   </div>
   <div class="header-right">
+    <div id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#4caf50;flex-shrink:0;transition:background 0.3s;" title="Sync status"></div>
     <button class="btn-hdr" onclick="openNewList()">+ New list</button>
     <a href="/" class="hub-link">← Hub</a>
   </div>
@@ -170,6 +171,7 @@ select option{background:var(--card);}
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 // ── RARITY COLOURS ────────────────────────────────────────────────────────────
 const COLOURS = ['#e8a030','#9b50d4','#4f7fd4','#5aad5a','#8a9bb0','#00c8b4','#d44f4f','#c8a050','#6080d4','#c050c0'];
@@ -190,39 +192,84 @@ const DEFAULT_FLUID = {dark:'#1a0830',mid:'#501880',hi:'#c080ff',glow:'#8050c0'}
 function fluidSVG(colour, idx) {
   const f = RARITY_FLUIDS[colour] || DEFAULT_FLUID;
   const u = 'f'+idx;
+  // Deterministic bubble positions based on tier index
+  const bubbles = [
+    {cx:60,  cy:48, r:4,  op:0.25},
+    {cx:110, cy:38, r:6,  op:0.18},
+    {cx:170, cy:52, r:3,  op:0.28},
+    {cx:230, cy:40, r:5,  op:0.20},
+    {cx:290, cy:50, r:4,  op:0.22},
+    {cx:340, cy:36, r:7,  op:0.15},
+    {cx:380, cy:48, r:3,  op:0.26},
+    {cx:80,  cy:28, r:2,  op:0.30},
+    {cx:200, cy:24, r:3,  op:0.22},
+    {cx:310, cy:30, r:2,  op:0.28},
+  ].map((b,i) => ({...b, cx: (b.cx + idx*37) % 390 + 5}));
+
   return `<svg class="pyramid-band-svg" viewBox="0 0 400 68" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
     <defs>
+      <!-- Base fluid colour — semi-translucent feel -->
       <linearGradient id="b${u}" x1="15%" y1="0%" x2="85%" y2="100%">
-        <stop offset="0%" stop-color="${f.mid}"/>
-        <stop offset="100%" stop-color="${f.dark}"/>
+        <stop offset="0%" stop-color="${f.mid}" stop-opacity="0.95"/>
+        <stop offset="100%" stop-color="${f.dark}" stop-opacity="1"/>
       </linearGradient>
+      <!-- Main inner glow — light refracting through liquid -->
       <radialGradient id="g${u}" cx="36%" cy="32%" r="52%" gradientUnits="objectBoundingBox">
-        <stop offset="0%" stop-color="${f.hi}" stop-opacity="0.52"/>
+        <stop offset="0%" stop-color="${f.hi}" stop-opacity="0.6"/>
+        <stop offset="55%" stop-color="${f.mid}" stop-opacity="0.15"/>
         <stop offset="100%" stop-color="${f.dark}" stop-opacity="0"/>
       </radialGradient>
-      <radialGradient id="p${u}" cx="74%" cy="78%" r="38%" gradientUnits="objectBoundingBox">
-        <stop offset="0%" stop-color="${f.hi}" stop-opacity="0.32"/>
+      <!-- Secondary glow pool -->
+      <radialGradient id="p${u}" cx="72%" cy="75%" r="35%" gradientUnits="objectBoundingBox">
+        <stop offset="0%" stop-color="${f.hi}" stop-opacity="0.3"/>
         <stop offset="100%" stop-color="${f.hi}" stop-opacity="0"/>
       </radialGradient>
+      <!-- Glass sheen top -->
       <linearGradient id="s${u}" x1="0%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stop-color="white" stop-opacity="0.4"/>
-        <stop offset="17%" stop-color="white" stop-opacity="0"/>
-        <stop offset="100%" stop-color="${f.dark}" stop-opacity="0.3"/>
+        <stop offset="0%" stop-color="white" stop-opacity="0.45"/>
+        <stop offset="20%" stop-color="white" stop-opacity="0.05"/>
+        <stop offset="21%" stop-color="white" stop-opacity="0"/>
+        <stop offset="100%" stop-color="${f.dark}" stop-opacity="0.28"/>
       </linearGradient>
+      <!-- Side vignette (glass container walls) -->
       <linearGradient id="v${u}" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="black" stop-opacity="0.38"/>
-        <stop offset="10%" stop-color="black" stop-opacity="0"/>
-        <stop offset="90%" stop-color="black" stop-opacity="0"/>
-        <stop offset="100%" stop-color="black" stop-opacity="0.38"/>
+        <stop offset="0%" stop-color="black" stop-opacity="0.35"/>
+        <stop offset="8%" stop-color="black" stop-opacity="0"/>
+        <stop offset="92%" stop-color="black" stop-opacity="0"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.35"/>
       </linearGradient>
+      <!-- Bubble gradient — glassy sphere feel -->
+      <radialGradient id="bub${u}" cx="35%" cy="30%" r="60%">
+        <stop offset="0%" stop-color="white" stop-opacity="0.7"/>
+        <stop offset="50%" stop-color="${f.hi}" stop-opacity="0.15"/>
+        <stop offset="100%" stop-color="${f.hi}" stop-opacity="0.05"/>
+      </radialGradient>
     </defs>
+    <!-- Base -->
     <rect width="400" height="68" fill="url(#b${u})" rx="3"/>
+    <!-- Inner light -->
     <rect width="400" height="68" fill="url(#g${u})"/>
+    <!-- Secondary glow -->
     <rect width="400" height="68" fill="url(#p${u})"/>
-    <ellipse cx="148" cy="20" rx="118" ry="14" fill="${f.hi}" opacity="0.10" transform="rotate(-3 148 20)"/>
+    <!-- Caustic light blobs — irregular like light through liquid -->
+    <ellipse cx="148" cy="22" rx="120" ry="13" fill="${f.hi}" opacity="0.09" transform="rotate(-2 148 22)"/>
+    <ellipse cx="80" cy="36" rx="50" ry="7" fill="${f.hi}" opacity="0.07" transform="rotate(4 80 36)"/>
+    <ellipse cx="300" cy="18" rx="70" ry="9" fill="${f.hi}" opacity="0.06" transform="rotate(-5 300 18)"/>
+    <!-- BUBBLES — glassy spheres rising -->
+    ${bubbles.map(b => `<g>
+      <circle cx="${b.cx}" cy="${b.cy}" r="${b.r}" fill="url(#bub${u})" opacity="${b.op}"/>
+      <circle cx="${b.cx - b.r*0.3}" cy="${b.cy - b.r*0.35}" r="${b.r*0.3}" fill="white" opacity="${b.op * 1.8}"/>
+    </g>`).join('')}
+    <!-- Fizz line at liquid surface — tiny dots -->
+    <line x1="20" y1="14" x2="380" y2="14" stroke="${f.hi}" stroke-width="0.5" stroke-dasharray="2,8" opacity="0.25"/>
+    <!-- Glass sheen -->
     <rect width="400" height="68" fill="url(#s${u})"/>
-    <rect width="400" height="1.5" y="0.5" fill="${f.hi}" opacity="0.6" rx="2"/>
+    <!-- Top rim highlight -->
+    <rect width="400" height="1.5" y="0.5" fill="${f.hi}" opacity="0.65" rx="2"/>
+    <!-- Wall vignette -->
     <rect width="400" height="68" fill="url(#v${u})"/>
+    <!-- Subtle bottom reflection — like glass base -->
+    <rect width="400" height="6" y="62" fill="${f.hi}" opacity="0.06" rx="2"/>
   </svg>`;
 }
 
@@ -237,12 +284,68 @@ function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;'
 function getList(id) { return lists.find(l => l.id === id); }
 function getTier(list, id) { return (list.tiers||[]).find(t => t.id === id); }
 
-function save() { try { localStorage.setItem('tl-v3', JSON.stringify({lists, activeId})); } catch(e) {} }
-function load() {
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
+const SURL = 'https://fedolhvxijpmncnljacx.supabase.co';
+const SKEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZlZG9saHZ4aWpwbW5jbmxqYWN4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNjkxNDUsImV4cCI6MjA5Mzk0NTE0NX0.z8VDayD3Unb3zl027LlDXr02GOuRZhCRIlgNYZM5uPE';
+const sb = supabase.createClient(SURL, SKEY);
+
+function setSync(s) {
+  const d = document.getElementById('sync-dot');
+  if (!d) return;
+  if (s === 'syncing') { d.style.background = '#e8a030'; d.style.animation = 'sdpulse 0.9s ease-in-out infinite'; }
+  else if (s === 'error') { d.style.background = '#c0392b'; d.style.animation = ''; }
+  else { d.style.background = '#4caf50'; d.style.animation = ''; }
+}
+
+// ── STORAGE ───────────────────────────────────────────────────────────────────
+function saveLocal() {
+  try { localStorage.setItem('tl-v3', JSON.stringify({lists, activeId})); } catch(e) {}
+}
+function loadLocal() {
   try {
     const s = JSON.parse(localStorage.getItem('tl-v3') || 'null');
     if (s) { lists = s.lists || []; activeId = s.activeId || null; }
   } catch(e) {}
+}
+
+// Save to both localStorage (instant) and Supabase (sync)
+async function save() {
+  saveLocal();
+  // Upsert each list individually
+  setSync('syncing');
+  let ok = true;
+  for (const list of lists) {
+    const {error} = await sb.from('tierlists').upsert({
+      id: list.id, name: list.name, description: list.desc||'',
+      tiers: list.tiers, items: list.items
+    });
+    if (error) { console.warn('Supabase upsert error:', error); ok = false; }
+  }
+  setSync(ok ? 'ok' : 'error');
+}
+
+async function loadFromSupabase() {
+  setSync('syncing');
+  const {data, error} = await sb.from('tierlists').select('*').order('created_at');
+  if (error || !data) {
+    console.warn('Supabase load failed, using localStorage:', error);
+    setSync('error');
+    loadLocal();
+    return;
+  }
+  // Merge: Supabase wins for any list that exists there, keep local-only lists too
+  const sbIds = new Set(data.map(r => r.id));
+  const localOnly = lists.filter(l => !sbIds.has(l.id));
+  lists = data.map(r => ({
+    id: r.id, name: r.name, desc: r.description||'',
+    tiers: r.tiers || defaultTiers(), items: r.items || []
+  })).concat(localOnly);
+  // Push any local-only lists up to Supabase
+  for (const l of localOnly) {
+    await sb.from('tierlists').upsert({id:l.id, name:l.name, description:l.desc||'', tiers:l.tiers, items:l.items});
+  }
+  saveLocal();
+  setSync('ok');
 }
 
 function defaultTiers() {
@@ -423,11 +526,12 @@ function saveList() {
   }
   save(); closeListModal(); render();
 }
-function deleteList() {
+async function deleteList() {
   if(!editListId||!confirm('Delete this list?')) return;
+  await sb.from('tierlists').delete().eq('id', editListId);
   lists=lists.filter(l=>l.id!==editListId);
   if(activeId===editListId) activeId=lists[0]?.id||null;
-  save(); closeListModal(); render();
+  saveLocal(); closeListModal(); render();
 }
 function renameList(id,val) { const l=getList(id); if(!l||!val.trim()) return; l.name=val.trim(); save(); renderBar(); }
 function redescList(id,val) { const l=getList(id); if(!l) return; l.desc=val.trim(); save(); }
@@ -525,14 +629,25 @@ function deleteItem() {
 function closeItemModal() { document.getElementById('item-modal').classList.remove('open'); editItemId=null; }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
-// Close modals on overlay click
 document.querySelectorAll('.overlay').forEach(el => {
   el.addEventListener('click', e => { if(e.target===el) el.classList.remove('open'); });
 });
 
-load();
-if(lists.length && !activeId) activeId=lists[0].id;
+// Add sync dot pulse animation
+const style = document.createElement('style');
+style.textContent = '@keyframes sdpulse{0%,100%{opacity:1}50%{opacity:0.3}}';
+document.head.appendChild(style);
+
+// Load local first for instant render, then sync from Supabase
+loadLocal();
+if (lists.length && !activeId) activeId = lists[0].id;
 render();
+
+// Then load from Supabase in background and re-render if data differs
+loadFromSupabase().then(() => {
+  if (lists.length && !activeId) activeId = lists[0].id;
+  render();
+});
 </script>
 </body>
 </html>
