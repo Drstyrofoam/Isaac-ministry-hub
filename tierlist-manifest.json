@@ -1,0 +1,14 @@
+{
+  "name": "Tierlists",
+  "short_name": "Tierlists",
+  "description": "Priority tracker",
+  "start_url": "/tierlist.html",
+  "display": "standalone",
+  "background_color": "#1a1610",
+  "theme_color": "#1a1610",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/tierlist-icon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/tierlist-icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

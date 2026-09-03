@@ -4,6 +4,12 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Tierlists</title>
+<link rel="manifest" href="/tierlist-manifest.json"/>
+<link rel="apple-touch-icon" href="/tierlist-icon.png"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Tierlists"/>
+<meta name="theme-color" content="#1a1610"/>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <style>
 :root {
@@ -311,7 +317,6 @@ function loadLocal() {
 // Save to both localStorage (instant) and Supabase (sync)
 async function save() {
   saveLocal();
-  // Upsert each list individually
   setSync('syncing');
   let ok = true;
   for (const list of lists) {
@@ -319,7 +324,12 @@ async function save() {
       id: list.id, name: list.name, description: list.desc||'',
       tiers: list.tiers, items: list.items
     });
-    if (error) { console.warn('Supabase upsert error:', error); ok = false; }
+    if (error) {
+      console.warn('Supabase upsert error:', error);
+      // Show error briefly in page title so you can see it
+      document.title = '❌ ' + (error.message || error.code || JSON.stringify(error)).slice(0,60);
+      ok = false;
+    }
   }
   setSync(ok ? 'ok' : 'error');
 }

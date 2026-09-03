@@ -1,0 +1,14 @@
+{
+  "name": "Ministry Hub",
+  "short_name": "Ministry Hub",
+  "description": "Isaac's ministry planning and prayer tool",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1e2a38",
+  "theme_color": "#1e2a38",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/hub-icon.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/hub-icon.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
