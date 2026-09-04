@@ -509,7 +509,7 @@
 <!-- JOURNAL -->
 <div id="journal" class="section">
   <div class="info-banner">
-    🎙 Tap Record to capture a thought. Name it, assign a bubble, tag themes. Copy to clipboard anytime.
+    🎙 Record a thought. Generate prayer points from any entry anytime.
   </div>
 
   <!-- Record card -->
@@ -525,9 +525,6 @@
     <div id="rec-status" style="text-align:center;font-size:13px;color:var(--muted);padding:4px 0 8px;">Tap record to begin</div>
     <button id="rec-btn" onclick="toggleRecording()" style="background:#e53935;color:white;border:none;padding:11px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;width:100%;margin-bottom:8px;">🎙 Start Recording</button>
     <div id="live-transcript" style="background:#f0f4f8;border-radius:8px;padding:10px;font-size:13px;color:#555;min-height:40px;display:none;line-height:1.5;"></div>
-    <div id="pp-generate-row" style="display:none;margin-top:10px;">
-      <button onclick="generatePrayerPoints()" style="background:var(--navy);color:white;border:none;padding:10px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;width:100%;">🙏 Generate prayer points from this recording</button>
-    </div>
   </div>
 
   <!-- Bubbles -->
@@ -555,19 +552,6 @@
 
   <!-- Entries -->
   <div id="journal-list"><div class="empty">No entries yet — tap record to begin</div></div>
-</div>
-
-<!-- PRAYER POINTS GENERATION MODAL -->
-<div class="modal-overlay" id="pp-gen-modal" onclick="closePPGenModal(event)">
-  <div class="modal" style="max-height:90vh;overflow-y:auto;">
-    <h3>🙏 Generated prayer points</h3>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">Review and edit each point before saving. Uncheck any you don't want.</p>
-    <div id="pp-gen-list"></div>
-    <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="btn btn-primary" style="flex:2" onclick="submitGeneratedPPs()">Save selected points</button>
-      <button class="btn btn-cancel" onclick="closePPGenModalDirect()">Cancel</button>
-    </div>
-  </div>
 </div>
 
 <!-- JOURNAL EDIT MODAL -->
@@ -1970,6 +1954,7 @@ function renderJournal() {
     const bubble = jBubbles.find(b => b.id === e.bubble_id);
     const tags = Array.isArray(e.tags) ? e.tags : [];
     const dateStr = e.date_label || new Date(e.created_at).toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    const sid = 'ppg-' + e.id.replace(/-/g,'');
     return `<div class="j-entry" style="${bubble?`border-left:3px solid ${bubble.colour};`:''}">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;gap:6px;">
         <div style="flex:1;min-width:0;">
@@ -1979,12 +1964,22 @@ function renderJournal() {
           ${tags.length ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px;">${tags.map(t=>`<span style="font-size:10px;background:#f0ede8;color:#666;padding:1px 7px;border-radius:99px;">${esc(t.trim())}</span>`).join('')}</div>` : ''}
         </div>
         <div style="display:flex;gap:4px;flex-shrink:0;">
-          <button class="btn-sm" onclick="copyJEntry('${e.id}')" style="font-size:11px;padding:3px 7px;" title="Copy to clipboard">📋</button>
+          <button class="btn-sm" onclick="togglePPGen('${e.id}','${sid}')" style="font-size:11px;padding:3px 7px;color:var(--navy);" title="Generate prayer points">🙏</button>
+          <button class="btn-sm" onclick="copyJEntry('${e.id}')" style="font-size:11px;padding:3px 7px;" title="Copy">📋</button>
           <button class="btn-sm" onclick="openJournalModal('${e.id}')" style="font-size:11px;padding:3px 7px;">✏️</button>
           <button class="btn-danger" onclick="delJEntry('${e.id}')">×</button>
         </div>
       </div>
       <div class="j-entry-text" id="jt-${e.id}">${esc(e.text)}</div>
+      <!-- Inline prayer point generator panel -->
+      <div id="${sid}" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:10px;">
+        <div id="${sid}-status" style="font-size:12px;color:var(--muted);margin-bottom:8px;text-align:center;"></div>
+        <div id="${sid}-list"></div>
+        <div id="${sid}-actions" style="display:none;margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="submitPPGen('${sid}')" style="flex:1;">Save selected</button>
+          <button class="btn-sm" onclick="togglePPGen('${e.id}','${sid}')">Close</button>
+        </div>
+      </div>
     </div>`;
   }).join('');
 }
@@ -2169,15 +2164,32 @@ async function stopRec() {
 }
 
 // ── PRAYER POINT GENERATION ───────────────────────────────────────────────────
-let lastTranscript = '';
-let generatedPPs = [];
+let ppGenData = {};
 
-async function generatePrayerPoints() {
-  const transcript = lastTranscript;
-  if (!transcript) return;
-  const btn = document.querySelector('#pp-generate-row button');
-  btn.textContent = '⏳ Generating...';
-  btn.disabled = true;
+// ── PRAYER POINT GENERATOR (inline per entry) ─────────────────────────────────
+let ppGenData = {}; // sid -> array of generated points
+
+async function togglePPGen(entryId, sid) {
+  const panel = document.getElementById(sid);
+  if (!panel) return;
+  const isOpen = panel.style.display !== 'none';
+  if (isOpen) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+
+  // If already generated, just show
+  if (ppGenData[sid]) return;
+
+  const entry = jEntries.find(e => e.id === entryId);
+  if (!entry?.text) return;
+
+  const statusEl = document.getElementById(sid + '-status');
+  const listEl = document.getElementById(sid + '-list');
+  const actionsEl = document.getElementById(sid + '-actions');
+
+  statusEl.textContent = '⏳ Generating prayer points...';
+  statusEl.style.display = 'block';
+  listEl.innerHTML = '';
+  if (actionsEl) actionsEl.style.display = 'none';
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2186,123 +2198,78 @@ async function generatePrayerPoints() {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        system: `You extract structured prayer points from spoken journal transcripts. 
-The user is Isaac, a Christian ministry leader at Frenchs Forest Anglican Church (FFAC) in Sydney.
-He prays for people in categories: Personal, Ministry brothers, Year 13, Evangelism contacts, Church community, Leadership, Fiji, Rachel.
+        system: `You extract structured prayer points from Isaac Lanham's journal entries.
+Isaac is a Christian ministry leader at Frenchs Forest Anglican Church (FFAC) in Sydney.
+He prays for: close brothers (Dom, Will, Aidan, Noah, Brandon), Year 13 group, café chats contacts, evangelism contacts, Rachel (girlfriend), family, church community, personal growth.
 
-Return ONLY a JSON array of prayer point objects, no other text, no markdown:
-[
-  {
-    "title": "Short prayer point title (max 8 words)",
-    "body": "Specific context or detail for this point",
-    "person": "Person's name if applicable, or null",
-    "subsection": "Category from the list above",
-    "type": "general or current"
-  }
-]
+Return ONLY a JSON array, no markdown, no other text:
+[{"title":"Short title max 8 words","body":"Specific context from the entry","person":"Name or null","subsection":"Ministry brothers|Year 13|Personal|Rachel|Evangelism contacts|Church community|Leadership|Fiji","type":"general|current"}]
 
-Rules:
-- Extract one prayer point per person or theme mentioned
-- "current" = time-sensitive (situation happening now), "general" = ongoing
-- Keep titles concise and actionable
-- body should include specific context from what was said
-- If no person is mentioned for a point, set person to null
-- Extract 1-8 prayer points depending on content`,
-        messages: [{ role: 'user', content: `Extract prayer points from this journal transcript:\n\n${transcript}` }]
+"current" = time-sensitive situation, "general" = ongoing.
+Extract 1-8 points. If nothing prayerworthy, return [].`,
+        messages: [{ role: 'user', content: `Extract prayer points from this journal entry:\n\n${entry.text}` }]
       })
     });
-
     const data = await response.json();
-    const text = data.content?.[0]?.text || '[]';
-    const clean = text.replace(/```json|```/g, '').trim();
-    generatedPPs = JSON.parse(clean);
+    const raw = data.content?.[0]?.text || '[]';
+    ppGenData[sid] = JSON.parse(raw.replace(/```json|```/g,'').trim());
   } catch(e) {
-    console.error('Generation error:', e);
-    generatedPPs = [];
+    console.error('PPGen error:', e);
+    ppGenData[sid] = [];
   }
 
-  btn.textContent = '🙏 Generate prayer points from this recording';
-  btn.disabled = false;
-
-  if (!generatedPPs.length) {
-    alert('Could not extract prayer points. Try speaking more clearly about specific people or situations.');
+  if (!ppGenData[sid].length) {
+    statusEl.textContent = 'No clear prayer points found in this entry.';
     return;
   }
 
-  renderPPGenModal();
-  document.getElementById('pp-gen-modal').classList.add('open');
-}
-
-function renderPPGenModal() {
-  const sections = prayerPoints ? [...new Set(prayerPoints.map(p => p.subsection).filter(Boolean))] : [];
-  document.getElementById('pp-gen-list').innerHTML = generatedPPs.map((pp, i) => `
-    <div style="background:#fafaf8;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <input type="checkbox" id="pp-check-${i}" checked style="width:18px;height:18px;cursor:pointer;flex-shrink:0;" />
-        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;">Point ${i+1}</span>
+  statusEl.style.display = 'none';
+  listEl.innerHTML = ppGenData[sid].map((pp, i) => `
+    <div style="background:#fafaf8;border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <input type="checkbox" id="${sid}-chk-${i}" checked style="width:16px;height:16px;cursor:pointer;flex-shrink:0;"/>
+        <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;">Point ${i+1}</span>
       </div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <div>
-          <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Title</label>
-          <input type="text" id="pp-title-${i}" value="${esc(pp.title)}" style="margin:4px 0 0;" />
-        </div>
-        <div>
-          <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Body / context</label>
-          <textarea id="pp-body-${i}" style="margin:4px 0 0;min-height:60px;">${esc(pp.body||'')}</textarea>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <div style="flex:1;">
-            <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Person</label>
-            <input type="text" id="pp-person-${i}" value="${esc(pp.person||'')}" placeholder="Leave blank if general" style="margin:4px 0 0;" />
-          </div>
-          <div style="flex:1;">
-            <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Type</label>
-            <select id="pp-type-${i}" style="margin:4px 0 0;">
-              <option value="general"${pp.type==='general'?' selected':''}>General</option>
-              <option value="current"${pp.type==='current'?' selected':''}>Current (urgent)</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Subsection</label>
-          <input type="text" id="pp-sub-${i}" value="${esc(pp.subsection||'')}" placeholder="e.g. Ministry brothers, Year 13" style="margin:4px 0 0;" />
-        </div>
+      <input type="text" id="${sid}-t-${i}" value="${esc(pp.title)}" style="margin:0 0 6px;font-weight:600;" placeholder="Title"/>
+      <textarea id="${sid}-b-${i}" style="margin:0 0 6px;min-height:52px;">${esc(pp.body||'')}</textarea>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="${sid}-p-${i}" value="${esc(pp.person||'')}" placeholder="Person (optional)" style="margin:0;flex:1;font-size:12px;"/>
+        <select id="${sid}-tp-${i}" style="margin:0;flex:1;font-size:12px;">
+          <option value="general"${pp.type==='general'?' selected':''}>General</option>
+          <option value="current"${pp.type==='current'?' selected':''}>Current</option>
+        </select>
       </div>
+      <input type="text" id="${sid}-s-${i}" value="${esc(pp.subsection||'General')}" placeholder="Subsection" style="margin:6px 0 0;font-size:12px;"/>
     </div>`).join('');
+
+  if (actionsEl) actionsEl.style.display = 'flex';
 }
 
-async function submitGeneratedPPs() {
-  const toSave = generatedPPs.map((pp, i) => {
-    if (!document.getElementById(`pp-check-${i}`)?.checked) return null;
+async function submitPPGen(sid) {
+  const pts = ppGenData[sid] || [];
+  const toSave = pts.map((pp, i) => {
+    if (!document.getElementById(`${sid}-chk-${i}`)?.checked) return null;
     return {
-      title: document.getElementById(`pp-title-${i}`)?.value.trim() || pp.title,
-      body: document.getElementById(`pp-body-${i}`)?.value.trim() || '',
-      person: document.getElementById(`pp-person-${i}`)?.value.trim() || null,
-      type: document.getElementById(`pp-type-${i}`)?.value || 'general',
-      subsection: document.getElementById(`pp-sub-${i}`)?.value.trim() || 'General',
-      archived: false,
-      archived_at: null
+      title: document.getElementById(`${sid}-t-${i}`)?.value.trim() || pp.title,
+      body: document.getElementById(`${sid}-b-${i}`)?.value.trim() || '',
+      person: document.getElementById(`${sid}-p-${i}`)?.value.trim() || null,
+      type: document.getElementById(`${sid}-tp-${i}`)?.value || 'general',
+      subsection: document.getElementById(`${sid}-s-${i}`)?.value.trim() || 'General',
+      archived: false, archived_at: null
     };
   }).filter(Boolean);
 
-  if (!toSave.length) { closePPGenModalDirect(); return; }
+  if (!toSave.length) { document.getElementById(sid).style.display = 'none'; return; }
 
   setSyncing('syncing');
   const { error } = await sb.from('prayer_points').insert(toSave);
-  if (error) {
-    setSyncing('error');
-    alert('Save failed: ' + (error.message || JSON.stringify(error)));
-    return;
-  }
+  if (error) { setSyncing('error'); alert('Save failed: ' + (error.message || JSON.stringify(error))); return; }
   setSyncing('ok');
-  closePPGenModalDirect();
-  // Reload prayer points so they appear immediately
+  document.getElementById(sid).style.display = 'none';
+  delete ppGenData[sid];
   await loadData();
-  alert(`✓ ${toSave.length} prayer point${toSave.length===1?'':'s'} saved!`);
+  alert(`✓ ${toSave.length} prayer point${toSave.length===1?'':'s'} saved to Points tab!`);
 }
-
-function closePPGenModal(e) { if (e.target === document.getElementById('pp-gen-modal')) closePPGenModalDirect(); }
-function closePPGenModalDirect() { document.getElementById('pp-gen-modal').classList.remove('open'); generatedPPs = []; }
 
 // ── START ─────────────────────────────────────────────────────────────────────
 init();
