@@ -2104,7 +2104,6 @@ function startRec() {
   };
   recognition.onerror = e => { if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error; };
   liveText = ''; isRecording = true; recSecs = 0;
-  document.getElementById('pp-generate-row').style.display = 'none';
   const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave'), lt = document.getElementById('live-transcript');
   btn.textContent = '⏹ Stop Recording'; btn.style.background = '#b71c1c';
   wave.style.display = 'flex'; if (lt) lt.style.display = 'block';
@@ -2123,7 +2122,6 @@ async function stopRec() {
   document.getElementById('rec-timer').textContent = '0:00';
   const text = liveText.trim();
   if (text) {
-    lastTranscript = text;
     document.getElementById('rec-status').textContent = 'Saving...';
     const dateLabel = new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     setSyncing('syncing');
@@ -2146,8 +2144,7 @@ async function stopRec() {
 
     if (saved) {
       setSyncing('ok'); renderJournal();
-      document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name and tag it';
-      document.getElementById('pp-generate-row').style.display = 'block';
+      document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name, or 🙏 to generate prayer points';
     } else {
       setSyncing('error');
       const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,120) : 'no error obj';
