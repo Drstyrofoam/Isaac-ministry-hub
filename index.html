@@ -2103,6 +2103,10 @@ function startRec() {
     if (lt) lt.textContent = (liveText + i) || 'Listening...';
   };
   recognition.onerror = e => { if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error; };
+  // onend fires after stop() finishes processing — save here so nothing is lost
+  recognition.onend = () => {
+    if (!isRecording) saveRecording();
+  };
   liveText = ''; isRecording = true; recSecs = 0;
   const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave'), lt = document.getElementById('live-transcript');
   btn.textContent = '⏹ Stop Recording'; btn.style.background = '#b71c1c';
@@ -2112,52 +2116,51 @@ function startRec() {
   recInterval = setInterval(() => { recSecs++; const m=Math.floor(recSecs/60),s=recSecs%60; document.getElementById('rec-timer').textContent=m+':'+(s<10?'0':'')+s; }, 1000);
 }
 
-async function stopRec() {
+function stopRec() {
   isRecording = false;
-  if (recognition) try { recognition.stop(); } catch(e) {}
   clearInterval(recInterval);
   const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave');
   btn.textContent = '🎙 Start Recording'; btn.style.background = '#e53935';
   wave.style.display = 'none';
   document.getElementById('rec-timer').textContent = '0:00';
-  const text = liveText.trim();
-  if (text) {
-    document.getElementById('rec-status').textContent = 'Saving...';
-    const dateLabel = new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    setSyncing('syncing');
-    let saved = false;
+  document.getElementById('rec-status').textContent = 'Processing...';
+  // Stop recognition — onend will fire once all pending results are delivered
+  if (recognition) try { recognition.stop(); } catch(e) { saveRecording(); }
+}
 
-    // Attempt 1: full schema (title, bubble_id, tags)
-    const r1 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel, title: '', bubble_id: null, tags: [] }]).select();
-    if (!r1.error && r1.data) {
-      jEntries.unshift(r1.data[0]); saved = true;
-    } else {
-      // Attempt 2: minimal schema fallback (text + date_label only)
-      const r2 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel }]).select();
-      if (!r2.error && r2.data) {
-        jEntries.unshift(r2.data[0]); saved = true;
-      } else {
-        console.error('Journal save error (full):', r1.error);
-        console.error('Journal save error (fallback):', r2.error);
-      }
-    }
-
-    if (saved) {
-      setSyncing('ok'); renderJournal();
-      document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name, or 🙏 to generate prayer points';
-    } else {
-      setSyncing('error');
-      const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,120) : 'no error obj';
-      const e2msg = r2.error ? (r2.error.message || r2.error.code || JSON.stringify(r2.error)).slice(0,120) : 'no error obj';
-      document.getElementById('rec-status').textContent = '❌ ' + e1msg + ' | ' + e2msg;
-      console.error('r1:', r1); console.error('r2:', r2);
-    }
-  } else {
-    document.getElementById('rec-status').textContent = 'Nothing recorded';
-  }
+async function saveRecording() {
   const lt = document.getElementById('live-transcript');
-  if (lt) { lt.style.display = 'none'; }
-  recSecs = 0;
+  if (lt) lt.style.display = 'none';
+  const text = liveText.trim();
+  liveText = ''; recSecs = 0;
+  if (!text) { document.getElementById('rec-status').textContent = 'Nothing recorded'; return; }
+
+  document.getElementById('rec-status').textContent = 'Saving...';
+  const dateLabel = new Date().toLocaleString('en-AU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  setSyncing('syncing');
+  let saved = false;
+
+  const r1 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel, title: '', bubble_id: null, tags: [] }]).select();
+  if (!r1.error && r1.data) {
+    jEntries.unshift(r1.data[0]); saved = true;
+  } else {
+    const r2 = await sb.from('journal_entries').insert([{ text, date_label: dateLabel }]).select();
+    if (!r2.error && r2.data) {
+      jEntries.unshift(r2.data[0]); saved = true;
+    } else {
+      console.error('Journal save error (full):', r1.error);
+      console.error('Journal save error (fallback):', r2.error);
+    }
+  }
+
+  if (saved) {
+    setSyncing('ok'); renderJournal();
+    document.getElementById('rec-status').textContent = 'Saved ✓ — tap ✏️ to name, or 🙏 to generate prayer points';
+  } else {
+    setSyncing('error');
+    const e1msg = r1.error ? (r1.error.message || r1.error.code || JSON.stringify(r1.error)).slice(0,120) : 'no error obj';
+    document.getElementById('rec-status').textContent = '❌ ' + e1msg;
+  }
 }
 
 // ── PRAYER POINT GENERATOR (inline per entry) ─────────────────────────────────
