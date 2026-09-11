@@ -2103,9 +2103,12 @@ function startRec() {
     if (lt) lt.textContent = (liveText + i) || 'Listening...';
   };
   recognition.onerror = e => { if (e.error !== 'no-speech') document.getElementById('rec-status').textContent = 'Error: ' + e.error; };
-  // onend fires after stop() finishes processing — save here so nothing is lost
   recognition.onend = () => {
-    if (!isRecording) saveRecording();
+    // Only save if user explicitly stopped — not on auto-restart
+    if (!isRecording && liveText.trim()) saveRecording();
+    else if (!isRecording && !liveText.trim()) {
+      document.getElementById('rec-status').textContent = 'Nothing recorded';
+    }
   };
   liveText = ''; isRecording = true; recSecs = 0;
   const btn = document.getElementById('rec-btn'), wave = document.getElementById('rec-wave'), lt = document.getElementById('live-transcript');
@@ -2195,15 +2198,20 @@ async function togglePPGen(entryId, sid) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1000,
-        system: `You extract structured prayer points from Isaac Lanham's journal entries.
-Isaac is a Christian ministry leader at Frenchs Forest Anglican Church (FFAC) in Sydney.
-He prays for: close brothers (Dom, Will, Aidan, Noah, Brandon), Year 13 group, café chats contacts, evangelism contacts, Rachel (girlfriend), family, church community, personal growth.
+        system: `You extract prayer points from Isaac Lanham's journal entries or notes.
+Isaac is a Christian ministry leader in Sydney. He prays for people around him.
 
-Return ONLY a JSON array, no markdown, no other text:
-[{"title":"Short title max 8 words","body":"Specific context from the entry","person":"Name or null","subsection":"Ministry brothers|Year 13|Personal|Rachel|Evangelism contacts|Church community|Leadership|Fiji","type":"general|current"}]
+ALWAYS return a JSON array even from short or simple input. If someone writes "pray for Dom's job" that is a valid prayer point. If they write a single sentence, extract it. Never refuse.
 
-"current" = time-sensitive situation, "general" = ongoing.
-Extract 1-8 points. If nothing prayerworthy, return [].`,
+Return ONLY a JSON array, no markdown, no explanation:
+[{"title":"Short title max 8 words","body":"Any extra context, or empty string if none","person":"Name if mentioned, else null","subsection":"Ministry brothers|Year 13|Personal|Rachel|Evangelism contacts|Church community|Leadership|Fiji|General","type":"general or current"}]
+
+Rules:
+- "current" = time-sensitive, "general" = ongoing
+- If input is already a prayer point, just format it
+- If multiple people mentioned, one object per person
+- If nothing remotely prayerworthy, return []
+- Keep titles short and actionable`,
         messages: [{ role: 'user', content: `Extract prayer points from this journal entry:\n\n${entry.text}` }]
       })
     });
