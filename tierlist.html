@@ -48,6 +48,8 @@ body{background:var(--bg);color:var(--cream);font-family:'Inter',sans-serif;min-
 /* TIER VIEW */
 .tiers-wrap{border-radius:6px;overflow:hidden;border:1px solid var(--border);}
 .tier-block{}
+.tier-block.dragging{opacity:0.35;}
+.tier-block.tier-drag-over{outline:2px solid var(--amber);outline-offset:-2px;}
 .tier-divider-line{height:1px;background:var(--border);}
 .tier-head{display:flex;align-items:center;gap:0;background:var(--surface);cursor:pointer;transition:background 0.12s;}
 .tier-head:hover{background:var(--card);}
@@ -397,8 +399,45 @@ function render() {
 
 function renderBar() {
   document.getElementById('list-bar').innerHTML =
-    lists.map(l => `<div class="list-chip${activeId===l.id?' active':''}" onclick="setActive('${l.id}')">${esc(l.name)}</div>`).join('') +
+    lists.map(l => `<div class="list-chip${activeId===l.id?' active':''}"
+      draggable="true"
+      ondragstart="listChipDragStart(event,'${l.id}')"
+      ondragend="listChipDragEnd(event)"
+      ondragover="listChipDragOver(event,'${l.id}')"
+      ondrop="listChipDrop(event,'${l.id}')"
+      onclick="setActive('${l.id}')"
+      style="cursor:grab;"
+    >${esc(l.name)}</div>`).join('') +
     `<div class="list-chip add-chip" onclick="openNewList()">+ New</div>`;
+}
+
+// ── LIST CHIP DRAG ─────────────────────────────────────────────────────────────
+let dragListId = null;
+function listChipDragStart(e, listId) {
+  dragListId = listId; e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.style.opacity = '0.4';
+}
+function listChipDragEnd(e) {
+  dragListId = null;
+  document.querySelectorAll('.list-chip').forEach(el => {
+    el.style.opacity = ''; el.style.outline = '';
+  });
+}
+function listChipDragOver(e, listId) {
+  if (!dragListId || dragListId === listId) return;
+  e.preventDefault();
+  document.querySelectorAll('.list-chip').forEach(el => el.style.outline = '');
+  e.currentTarget.style.outline = '2px solid var(--amber)';
+}
+function listChipDrop(e, targetListId) {
+  e.preventDefault();
+  if (!dragListId || dragListId === targetListId) return;
+  const fromIdx = lists.findIndex(l => l.id === dragListId);
+  const toIdx = lists.findIndex(l => l.id === targetListId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = lists.splice(fromIdx, 1);
+  lists.splice(toIdx, 0, moved);
+  save(); render();
 }
 
 function setView(v) { view = v; const l = getList(activeId); if(l) renderVC(l); document.querySelectorAll('.view-btn').forEach(b => b.classList.toggle('active', b.textContent.includes(v==='tier'?'Tier':'Pyr'))); }
@@ -410,8 +449,13 @@ function renderTierView(list) {
   return `<div class="tiers-wrap">` + list.tiers.map((t, ti) => {
     const items = (list.items||[]).filter(i => i.tierId === t.id);
     const open = openTiers[t.id] !== false;
-    return `<div class="tier-block">
+    return `<div class="tier-block" id="tb-${t.id}" draggable="true"
+      ondragstart="tierDragStart(event,'${t.id}')"
+      ondragend="tierDragEnd(event)"
+      ondragover="tierDragOver(event,'${t.id}')"
+      ondrop="tierDrop(event,'${list.id}','${t.id}')">
       <div class="tier-head" onclick="toggleTierOpen('${list.id}','${t.id}')">
+        <div style="display:flex;align-items:center;justify-content:center;width:28px;color:var(--muted);font-size:14px;cursor:grab;flex-shrink:0;" onclick="event.stopPropagation()">⠿</div>
         <div class="tier-letter" style="background:${t.colour}">${esc((t.name||'?')[0])}</div>
         <div class="tier-divider-v"></div>
         <input class="tier-name-inp" value="${esc(t.name)}" onclick="event.stopPropagation()" onblur="renameTier('${list.id}','${t.id}',this.value)" onkeydown="if(event.key==='Enter')this.blur();event.stopPropagation();"/>
@@ -485,6 +529,36 @@ function dragEnd() { document.querySelectorAll('.item-card,.drop-zone').forEach(
 function drop(e, listId, tierId) { e.preventDefault(); if(!dragItemId) return; moveItemTo(listId,dragItemId,tierId); }
 function dropOnItem(e, targetId) { e.preventDefault(); e.stopPropagation(); if(!dragItemId||dragItemId===targetId) return; const l=getList(activeId); const t=l.items.find(i=>i.id===targetId); if(t) moveItemTo(l.id,dragItemId,t.tierId); }
 function moveItemTo(listId, itemId, tierId) { const l=getList(listId); const item=l.items.find(i=>i.id===itemId); if(!item||item.tierId===tierId) return; item.tierId=tierId; save(); renderVC(l); }
+
+// ── TIER DRAG ─────────────────────────────────────────────────────────────────
+let dragTierId = null;
+function tierDragStart(e, tierId) {
+  dragTierId = tierId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.stopPropagation();
+  setTimeout(() => document.getElementById('tb-'+tierId)?.classList.add('dragging'), 0);
+}
+function tierDragEnd(e) {
+  document.querySelectorAll('.tier-block').forEach(el => el.classList.remove('dragging','tier-drag-over'));
+  dragTierId = null;
+}
+function tierDragOver(e, tierId) {
+  if (!dragTierId || dragTierId === tierId) return;
+  e.preventDefault(); e.stopPropagation();
+  document.querySelectorAll('.tier-block').forEach(el => el.classList.remove('tier-drag-over'));
+  document.getElementById('tb-'+tierId)?.classList.add('tier-drag-over');
+}
+function tierDrop(e, listId, targetTierId) {
+  e.preventDefault(); e.stopPropagation();
+  if (!dragTierId || dragTierId === targetTierId) return;
+  const l = getList(listId);
+  const fromIdx = l.tiers.findIndex(t => t.id === dragTierId);
+  const toIdx = l.tiers.findIndex(t => t.id === targetTierId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [moved] = l.tiers.splice(fromIdx, 1);
+  l.tiers.splice(toIdx, 0, moved);
+  save(); renderVC(l);
+}
 
 // ── MOVE MENU ─────────────────────────────────────────────────────────────────
 function openMoveMenu(e, listId, itemId, curTierId) {
