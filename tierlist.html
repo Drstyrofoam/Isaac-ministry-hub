@@ -317,12 +317,60 @@ function loadLocal() {
   } catch(e) {}
 }
 
+// ── 3-way merge helpers ───────────────────────────────────────────────────────
+// canon(): key-order-independent stringify (Postgres jsonb reorders keys, so
+// plain JSON.stringify comparisons give false "changed" results)
+function canon(x){
+  if(x===undefined) return 'null';
+  if(x===null||typeof x!=='object') return JSON.stringify(x);
+  if(Array.isArray(x)) return '['+x.map(canon).join(',')+']';
+  return '{'+Object.keys(x).filter(k=>x[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canon(x[k])).join(',')+'}';
+}
+function snap(l){ return {name:l.name, desc:l.desc||'', tiers:l.tiers||[], items:l.items||[]}; }
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+
+// B = last synced copy, L = this device now, S = server now
+function mergeById(B, L, S){
+  const bm=new Map(B.map(x=>[x.id,x])), lm=new Map(L.map(x=>[x.id,x])), sm=new Map(S.map(x=>[x.id,x]));
+  const same=(a,b)=>canon(a)===canon(b);
+  const out=[], seen=new Set();
+  const consider=id=>{
+    if(seen.has(id)) return; seen.add(id);
+    const b=bm.get(id), l=lm.get(id), s=sm.get(id);
+    if(l&&s) out.push(b&&same(l,b) ? s : l);          // untouched here → take server; edited here → keep mine
+    else if(l&&!s){ if(!b || !same(l,b)) out.push(l); } // new here, or edited here after remote delete → keep; else remote deleted it
+    else if(!l&&s){ if(!b || !same(s,b)) out.push(s); } // new remotely, or edited remotely after my delete → keep; else I deleted it
+  };
+  L.forEach(x=>consider(x.id)); S.forEach(x=>consider(x.id));
+  return out;
+}
+function mergeList(b, l, s){
+  const B=b||{};
+  return {
+    id:l.id,
+    name: l.name!==B.name ? l.name : s.name,
+    desc: (l.desc||'')!==(B.desc||'') ? (l.desc||'') : (s.desc||''),
+    tiers: mergeById(B.tiers||[], l.tiers||[], s.tiers||[]),
+    items: mergeById(B.items||[], l.items||[], s.items||[])
+  };
+}
+function fixOrphans(l){
+  const ids=new Set(l.tiers.map(t=>t.id)); const first=l.tiers[0]&&l.tiers[0].id;
+  l.items.forEach(i=>{ if(!ids.has(i.tierId)) i.tierId=first||null; });
+  return l;
+}
+
 // ── SYNC ──────────────────────────────────────────────────────────────────────
-// 'dirty' = lists whose last push to Supabase failed. We never let the server
-// copy overwrite these, and we retry pushing them.
-let dirty = new Set();
+// base    = last copy of each list that this device successfully synced
+// dirty   = lists whose last push failed (never replaced by the server copy)
+// deleted = lists deleted here whose server delete hasn't gone through yet
+let base = {}, dirty = new Set(), deleted = new Set();
+try { base = JSON.parse(localStorage.getItem('tl-base') || '{}'); } catch(e) {}
 try { dirty = new Set(JSON.parse(localStorage.getItem('tl-dirty') || '[]')); } catch(e) {}
-function saveDirty() { try { localStorage.setItem('tl-dirty', JSON.stringify([...dirty])); } catch(e) {} }
+try { deleted = new Set(JSON.parse(localStorage.getItem('tl-deleted') || '[]')); } catch(e) {}
+function saveBase()    { try { localStorage.setItem('tl-base', JSON.stringify(base)); } catch(e) {} }
+function saveDirty()   { try { localStorage.setItem('tl-dirty', JSON.stringify([...dirty])); } catch(e) {} }
+function saveDeleted() { try { localStorage.setItem('tl-deleted', JSON.stringify([...deleted])); } catch(e) {} }
 
 function showSyncError(error) {
   const el = document.getElementById('sync-err');
@@ -333,17 +381,38 @@ function showSyncError(error) {
 }
 function hideSyncError() { const el = document.getElementById('sync-err'); if (el) el.style.display = 'none'; }
 
-async function pushList(list) {
+const rowToList = r => ({ id:r.id, name:r.name, desc:r.description||'', tiers:r.tiers||[], items:r.items||[] });
+let pushChain = Promise.resolve();
+let pulledRemoteChanges = false;
+
+// Pushes are queued one at a time. Each push first merges in whatever the
+// other device has done since we last synced, so nothing gets overwritten.
+function pushList(list) {
+  const run = pushChain.then(() => doPush(list));
+  pushChain = run.catch(() => {});
+  return run;
+}
+async function doPush(list) {
+  const {data: srv, error: readErr} = await sb.from('tierlists').select('*').eq('id', list.id).maybeSingle();
+  if (readErr) { dirty.add(list.id); saveDirty(); showSyncError(readErr); return false; }
+  if (srv) {
+    const before = canon(snap(list));
+    const m = fixOrphans(mergeList(base[list.id], list, rowToList(srv)));
+    list.name = m.name; list.desc = m.desc; list.tiers = m.tiers; list.items = m.items;
+    if (canon(snap(list)) !== before) pulledRemoteChanges = true;
+  }
   const {error} = await sb.from('tierlists').upsert({
     id: list.id, name: list.name, description: list.desc || '',
     tiers: list.tiers, items: list.items
   });
   if (error) { console.warn('Supabase upsert error:', error); dirty.add(list.id); saveDirty(); showSyncError(error); return false; }
+  base[list.id] = clone(snap(list)); saveBase();
   dirty.delete(list.id); saveDirty();
+  saveLocal();
   return true;
 }
 
-// Save locally (instant), then push ONLY the list being edited
+// Save locally (instant), then sync ONLY the list being edited
 async function save() {
   saveLocal();
   setSync('syncing');
@@ -351,6 +420,7 @@ async function save() {
   const ok = l ? await pushList(l) : true;
   setSync(ok ? 'ok' : 'error');
   if (ok) hideSyncError();
+  if (pulledRemoteChanges) { pulledRemoteChanges = false; render(); }
 }
 
 async function loadFromSupabase() {
@@ -361,26 +431,43 @@ async function loadFromSupabase() {
     setSync('error'); showSyncError(error);
     return;
   }
-  const localMap = new Map(lists.map(l => [l.id, l]));
-  const sbMap = new Map(data.map(r => [r.id, {
-    id: r.id, name: r.name, desc: r.description || '',
-    tiers: r.tiers || defaultTiers(), items: r.items || []
-  }]));
-  const merged = [];
-  // Keep this device's order; take the server copy unless we have unsynced edits
-  for (const l of lists) {
-    if (dirty.has(l.id) || !sbMap.has(l.id)) merged.push(l);
-    else merged.push(sbMap.get(l.id));
+  const sbMap = new Map(data.map(r => [r.id, rowToList(r)]));
+
+  // Finish any deletions that failed earlier
+  for (const id of [...deleted]) {
+    if (sbMap.has(id)) {
+      const {error: de} = await sb.from('tierlists').delete().eq('id', id);
+      if (de) continue;
+      sbMap.delete(id);
+    }
+    deleted.delete(id);
   }
-  // Lists that only exist on the server (e.g. created on another device)
-  for (const [id, l] of sbMap) if (!localMap.has(id)) merged.push(l);
+  saveDeleted();
+
+  const merged = [], toPush = [];
+  for (const l of lists) {
+    const s = sbMap.get(l.id);
+    if (s) {
+      const m = fixOrphans(mergeList(base[l.id], l, s));
+      merged.push(m);
+      if (canon(snap(m)) !== canon(snap(s))) toPush.push(m);      // I have changes the server lacks
+      else { base[l.id] = clone(snap(m)); dirty.delete(l.id); }    // fully in sync
+    } else if (base[l.id] && !dirty.has(l.id)) {
+      delete base[l.id];                                           // synced before, now gone → deleted on another device
+    } else {
+      merged.push(l); toPush.push(l);                              // brand new here (or unsynced edits)
+    }
+  }
+  const localIds = new Set(lists.map(l => l.id));
+  for (const [id, s] of sbMap) {                                   // created on another device
+    if (!localIds.has(id) && !deleted.has(id)) { merged.push(s); base[id] = clone(snap(s)); }
+  }
   lists = merged;
-  saveLocal();
-  // Push anything the server doesn't have or that failed before
+  if (!getList(activeId)) activeId = lists[0] ? lists[0].id : null;
+  saveBase(); saveDirty(); saveLocal();
+
   let ok = true;
-  for (const l of lists) {
-    if (dirty.has(l.id) || !sbMap.has(l.id)) { if (!(await pushList(l))) ok = false; }
-  }
+  for (const l of toPush) { if (!(await pushList(l))) ok = false; }
   setSync(ok ? 'ok' : 'error');
   if (ok) hideSyncError();
 }
@@ -637,9 +724,12 @@ function saveList() {
 }
 async function deleteList() {
   if(!editListId||!confirm('Delete this list?')) return;
-  await sb.from('tierlists').delete().eq('id', editListId);
-  lists=lists.filter(l=>l.id!==editListId);
-  if(activeId===editListId) activeId=lists[0]?.id||null;
+  const id = editListId;
+  const {error} = await sb.from('tierlists').delete().eq('id', id);
+  if (error) { deleted.add(id); saveDeleted(); showSyncError(error); }
+  delete base[id]; saveBase(); dirty.delete(id); saveDirty();
+  lists=lists.filter(l=>l.id!==id);
+  if(activeId===id) activeId=lists[0]?.id||null;
   saveLocal(); closeListModal(); render();
 }
 function renameList(id,val) { const l=getList(id); if(!l||!val.trim()) return; l.name=val.trim(); save(); renderBar(); }
