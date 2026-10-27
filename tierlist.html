@@ -135,6 +135,7 @@ select option{background:var(--card);}
   </div>
 </div>
 <div class="list-bar" id="list-bar"></div>
+<div id="sync-err" style="display:none;background:#3a1a1a;color:#f0a0a0;font-size:12px;padding:8px 20px;line-height:1.4;"></div>
 <div class="main" id="main"></div>
 <div class="move-menu" id="move-menu"></div>
 
@@ -316,48 +317,72 @@ function loadLocal() {
   } catch(e) {}
 }
 
-// Save to both localStorage (instant) and Supabase (sync)
+// ── SYNC ──────────────────────────────────────────────────────────────────────
+// 'dirty' = lists whose last push to Supabase failed. We never let the server
+// copy overwrite these, and we retry pushing them.
+let dirty = new Set();
+try { dirty = new Set(JSON.parse(localStorage.getItem('tl-dirty') || '[]')); } catch(e) {}
+function saveDirty() { try { localStorage.setItem('tl-dirty', JSON.stringify([...dirty])); } catch(e) {} }
+
+function showSyncError(error) {
+  const el = document.getElementById('sync-err');
+  if (!el) return;
+  const msg = (error && (error.message || error.code)) || 'unknown error';
+  el.textContent = 'Not syncing to other devices — ' + msg + ' (your changes are saved on this device)';
+  el.style.display = 'block';
+}
+function hideSyncError() { const el = document.getElementById('sync-err'); if (el) el.style.display = 'none'; }
+
+async function pushList(list) {
+  const {error} = await sb.from('tierlists').upsert({
+    id: list.id, name: list.name, description: list.desc || '',
+    tiers: list.tiers, items: list.items
+  });
+  if (error) { console.warn('Supabase upsert error:', error); dirty.add(list.id); saveDirty(); showSyncError(error); return false; }
+  dirty.delete(list.id); saveDirty();
+  return true;
+}
+
+// Save locally (instant), then push ONLY the list being edited
 async function save() {
   saveLocal();
   setSync('syncing');
-  let ok = true;
-  for (const list of lists) {
-    const {error} = await sb.from('tierlists').upsert({
-      id: list.id, name: list.name, description: list.desc||'',
-      tiers: list.tiers, items: list.items
-    });
-    if (error) {
-      console.warn('Supabase upsert error:', error);
-      // Show error briefly in page title so you can see it
-      document.title = '❌ ' + (error.message || error.code || JSON.stringify(error)).slice(0,60);
-      ok = false;
-    }
-  }
+  const l = getList(activeId);
+  const ok = l ? await pushList(l) : true;
   setSync(ok ? 'ok' : 'error');
+  if (ok) hideSyncError();
 }
 
 async function loadFromSupabase() {
   setSync('syncing');
-  const {data, error} = await sb.from('tierlists').select('*').order('created_at');
+  const {data, error} = await sb.from('tierlists').select('*');
   if (error || !data) {
     console.warn('Supabase load failed, using localStorage:', error);
-    setSync('error');
-    loadLocal();
+    setSync('error'); showSyncError(error);
     return;
   }
-  // Merge: Supabase wins for any list that exists there, keep local-only lists too
-  const sbIds = new Set(data.map(r => r.id));
-  const localOnly = lists.filter(l => !sbIds.has(l.id));
-  lists = data.map(r => ({
-    id: r.id, name: r.name, desc: r.description||'',
+  const localMap = new Map(lists.map(l => [l.id, l]));
+  const sbMap = new Map(data.map(r => [r.id, {
+    id: r.id, name: r.name, desc: r.description || '',
     tiers: r.tiers || defaultTiers(), items: r.items || []
-  })).concat(localOnly);
-  // Push any local-only lists up to Supabase
-  for (const l of localOnly) {
-    await sb.from('tierlists').upsert({id:l.id, name:l.name, description:l.desc||'', tiers:l.tiers, items:l.items});
+  }]));
+  const merged = [];
+  // Keep this device's order; take the server copy unless we have unsynced edits
+  for (const l of lists) {
+    if (dirty.has(l.id) || !sbMap.has(l.id)) merged.push(l);
+    else merged.push(sbMap.get(l.id));
   }
+  // Lists that only exist on the server (e.g. created on another device)
+  for (const [id, l] of sbMap) if (!localMap.has(id)) merged.push(l);
+  lists = merged;
   saveLocal();
-  setSync('ok');
+  // Push anything the server doesn't have or that failed before
+  let ok = true;
+  for (const l of lists) {
+    if (dirty.has(l.id) || !sbMap.has(l.id)) { if (!(await pushList(l))) ok = false; }
+  }
+  setSync(ok ? 'ok' : 'error');
+  if (ok) hideSyncError();
 }
 
 function defaultTiers() {
@@ -731,6 +756,16 @@ render();
 loadFromSupabase().then(() => {
   if (lists.length && !activeId) activeId = lists[0].id;
   render();
+});
+
+// Pull the latest from the other device whenever this tab/app comes back into view
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (document.querySelector('.overlay.open')) return; // don't disturb an open editor
+  loadFromSupabase().then(() => {
+    if (!getList(activeId) && lists.length) activeId = lists[0].id;
+    render();
+  });
 });
 </script>
 </body>
